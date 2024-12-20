@@ -6,6 +6,7 @@ transformers==4.35.0
 torch
 torchvision
 torchaudio
+sqlalchemy
 sentencepiece==0.1.99
 accelerate==0.20.3
 
