@@ -8,7 +8,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     temperature: Optional[float] = 0.7
-    max_tokens: Optional[int] = 2000
+    max_tokens: Optional[int] = 800
 
 class ChatResponse(BaseModel):
-    response: str 
+    text: str 

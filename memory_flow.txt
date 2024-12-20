@@ -1,0 +1,50 @@
+Overall Flow
+
+	1.	User Prompt Arrives
+	•	The user sends a new query to the system.
+	2.	Summarize the Conversation So Far (Summarization Model)
+	•	A small, specialized summarization model (e.g., a fine-tuned T5-small) takes the recent conversation turns (or the last Q&A pair) and produces a concise summary.
+	•	This keeps the working memory manageable and provides a quick reference of what’s been discussed.
+	3.	Decision on Retrieval Strategy (Classification Logic / Small Model)
+	•	Using either simple heuristics or a small classification model, the system compares:
+	•	The new user prompt
+	•	The current summary
+	•	Possibly embeddings from previous Q&As
+	•	It determines if the user is:
+	1.	Continuing the same topic and might need related context,
+	2.	Asking about a previously mentioned detail (requiring retrieval of a past Q&A snippet),
+	3.	Starting a new topic (requiring fresh context from the vector database).
+	4.	Query Extraction (Query Normalization Model)
+	•	If the system decides that previously mentioned details or new contextual info is needed, it uses a small "query normalization" model.
+	•	This model transforms the user's request into a clean, focused query string. For example, it takes "Earlier you mentioned the specific date when Topic X was introduced. Can you repeat that?" and outputs "the specific date when Topic X was introduced."
+	•	The model should also assign priority weights to different parts of the query to improve retrieval relevance.
+	•	This ensures the system queries the vector database or memory with a clear, precise search term.
+	5.	Vector Database Retrieval
+	•	With the extracted, clean query, the system searches the vector database to find relevant documents or past Q&A details.
+	•	The retrieved context is then available to the main LLM.
+	6.	Main LLM Response Generation
+	•	Finally, the main large language model (LLM) receives:
+	•	The summarized conversation so far (for context),
+	•	The newly retrieved documents or Q&A snippets (if any),
+	•	The user’s original prompt.
+	•	It uses this combined information to generate a final, coherent response to the user.
+
+Models Involved
+
+	1.	Summarization Model:
+	•	A small, fine-tuned model (e.g., T5-small, DistilBART) trained specifically to summarize recent conversation turns.
+	2.	Classification/Decision Model or Heuristics:
+	•	A lightweight logic layer or a small classification model that determines the retrieval strategy (same topic, reference old Q&A, or new topic).
+	3.	Query Normalization/Extraction Model:
+	•	Another small, fine-tuned model (could be T5-small or a small GPT-2 variant) specifically trained to strip conversational fluff and produce a clean, focused query.
+	4.	Main LLM:
+	•	The large language model (e.g., a LLaMA, GPT-3.5, or another advanced model) that ultimately provides the final answer to the user.
+
+In Summary
+
+	•	Summarization model: Compresses recent dialogue into a concise summary at each turn.
+	•	Classification/heuristic step: Decides how to retrieve context based on the user’s new prompt and the conversation summary.
+	•	Query extraction model: Converts user requests into a clean search query for the vector database.
+	•	Main LLM: Produces the final user-facing answer, leveraging all the processed context.
+
+This pipeline ensures that long conversations remain manageable, relevant details are recalled when needed, and new topics start fresh without unnecessary baggage.
