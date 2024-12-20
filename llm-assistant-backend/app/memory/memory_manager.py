@@ -35,14 +35,16 @@ class MemoryManager:
         try:
             logger.info("Starting summarization process...")
             loop = asyncio.get_event_loop()
-            self.current_summary = await loop.run_in_executor(
+            summary_result = await loop.run_in_executor(
                 None,
                 self.summarizer.summarize,
                 self.conversation_history
             )
-            # Enhanced summary logging
+            self.current_summary, processing_time = summary_result  # Unpack both values
+            
+            # Log summary with timing information
             logger.info("=== New Conversation Summary ===")
-            logger.info(f"{self.current_summary}")
+            logger.info(f"Summary (generated in {processing_time:.2f}s): {self.current_summary}")
             logger.info("==============================")
         except Exception as e:
             logger.error(f"Error during summarization: {str(e)}")

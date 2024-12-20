@@ -2,6 +2,7 @@ from transformers import AutoTokenizer, BartForConditionalGeneration
 import torch
 import logging
 import warnings
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +27,12 @@ class ConversationSummarizer:
             raise
         
     def summarize(self, conversation_history):
+        start_time = time.time()
+        logger.info("Starting summarization process...")
+        
         formatted_convo = self._format_conversation(conversation_history)
+        format_time = time.time()
+        logger.info(f"Conversation formatting took {format_time - start_time:.2f} seconds")
 
         # Add instructions as a separate prompt or use a system message if your pipeline supports it.
         instructions = "Summarize the following conversation, focus only on key points. Make sure the summary is in third person."
@@ -35,30 +41,38 @@ class ConversationSummarizer:
         logger.info(f"Formatted conversation: {formatted_convo[:200]}...")
 
         # Tokenize
+        tokenize_start = time.time()
         inputs = self.tokenizer(
             formatted_convo,
             max_length=1024,
             truncation=True,
             return_tensors="pt"
         ).to(self.device)
+        tokenize_time = time.time()
+        logger.info(f"Tokenization took {tokenize_time - tokenize_start:.2f} seconds")
         
         # Generate summary
+        generate_start = time.time()
         with torch.no_grad():
             summary_ids = self.model.generate(
                 inputs["input_ids"],
-                max_length=60,
+                max_length=1024,
                 min_length=5,
                 num_beams=4,
                 length_penalty=2.0,
                 early_stopping=True,
             )
+        generate_time = time.time()
+        logger.info(f"Summary generation took {generate_time - generate_start:.2f} seconds")
         
         summary = self.tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+        decode_time = time.time()
+        logger.info(f"Decoding took {decode_time - generate_time:.2f} seconds")
         
-        logger.info("=== Generated Summary ===")
-        logger.info(f"{summary}")
-        logger.info("=======================")
-        return summary
+        total_time = time.time() - start_time
+        logger.info(f"Total summarization process took {total_time:.2f} seconds")
+        
+        return summary, total_time  # Return both summary and timing
             
     
     def _format_conversation(self, conversation_history):
