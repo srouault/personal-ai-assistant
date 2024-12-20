@@ -3,7 +3,9 @@ uvicorn==0.23.2
 python-dotenv==1.0.0
 pydantic==2.6.1
 transformers==4.35.0
-torch>=2.0.1
+torch
+torchvision
+torchaudio
 sentencepiece==0.1.99
 accelerate==0.20.3
 

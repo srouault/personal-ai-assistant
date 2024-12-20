@@ -3,6 +3,7 @@ import torch
 import logging
 import warnings
 import time
+from contextlib import nullcontext
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -15,13 +16,22 @@ class ConversationSummarizer:
     def __init__(self, model_name="sanjayuzu/facebook-bart-large-cnn-pretrained_text_summarization_samsum"):
         logger.info(f"Initializing summarizer with model: {model_name}")
         try:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            logger.info(f"Using device: {self.device}")
+            # Device selection for Apple Silicon
+            if torch.backends.mps.is_available():
+                self.device = torch.device("mps")
+                logger.info("Using Apple Metal GPU (MPS)")
+            else:
+                self.device = torch.device("cpu")
+                logger.info("MPS not available, using CPU")
             
+            # Load model and tokenizer with device placement
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model = BartForConditionalGeneration.from_pretrained(model_name)
+            self.model = BartForConditionalGeneration.from_pretrained(
+                model_name,
+                torch_dtype=torch.float16 if torch.backends.mps.is_available() else torch.float32
+            )
             self.model.to(self.device)
-            logger.info("Summarizer model loaded successfully")
+            logger.info(f"Model loaded successfully. Model device: {next(self.model.parameters()).device}")
         except Exception as e:
             logger.error(f"Error loading summarizer model: {str(e)}")
             raise
@@ -35,12 +45,12 @@ class ConversationSummarizer:
         logger.info(f"Conversation formatting took {format_time - start_time:.2f} seconds")
 
         # Add instructions as a separate prompt or use a system message if your pipeline supports it.
-        instructions = "Summarize the following conversation, focus only on key points. Make sure the summary is in third person."
+        instructions = "Summarize the conversation between the user and the assistant. Describe what is being asked and answered in third person."
         full_input = instructions + formatted_convo
             
         logger.info(f"Formatted conversation: {formatted_convo[:200]}...")
 
-        # Tokenize
+        # Tokenize and move to device immediately
         tokenize_start = time.time()
         inputs = self.tokenizer(
             formatted_convo,
@@ -83,3 +93,9 @@ class ConversationSummarizer:
             content = turn['content'].strip()
             parts.append(f"{role}: {content}")
         return "\n".join(parts)
+
+    def _log_gpu_memory():
+        if torch.cuda.is_available():
+            memory_allocated = torch.cuda.memory_allocated(0) / 1024**2  # Convert to MB
+            memory_reserved = torch.cuda.memory_reserved(0) / 1024**2
+            logger.info(f"GPU Memory: Allocated: {memory_allocated:.2f}MB, Reserved: {memory_reserved:.2f}MB")
