@@ -85,12 +85,19 @@ class DatabaseService:
                 session.refresh(chat)
             return chat
     
-    def add_interaction_summary(self, chat_id: int, interaction_id: int, summary: str) -> InteractionSummary:
+    def add_interaction_summary(
+        self, 
+        chat_id: int, 
+        interaction_id: int, 
+        user_summary: str,
+        assistant_summary: str
+    ) -> InteractionSummary:
         with self.get_session() as session:
             interaction_summary = InteractionSummary(
                 chat_id=chat_id,
                 interaction_id=interaction_id,
-                summary=summary
+                user_summary=user_summary,
+                assistant_summary=assistant_summary
             )
             session.add(interaction_summary)
             session.commit()

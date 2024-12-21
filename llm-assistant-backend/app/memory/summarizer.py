@@ -36,7 +36,7 @@ class ConversationSummarizer:
             logger.error(f"Error loading summarizer model: {str(e)}")
             raise
         
-    def summarize(self, conversation_history):
+    def summarize(self, conversation_history, prompt="Summarize this conversation:"):
         start_time = time.time()
         logger.info("Starting summarization process...")
         
@@ -44,10 +44,8 @@ class ConversationSummarizer:
         format_time = time.time()
         logger.info(f"Conversation formatting took {format_time - start_time:.2f} seconds")
 
-        # Add instructions as a separate prompt or use a system message if your pipeline supports it.
-        instructions = "Describe very briefly what the assistant answered:"
-        full_input = instructions + formatted_convo
-            
+        # Add the prompt to the input
+        full_input = f"Instruction: {prompt}\n\n Text: {formatted_convo}"
         logger.info(f"Formatted conversation: {formatted_convo[:200]}...")
 
         # Tokenize and move to device immediately

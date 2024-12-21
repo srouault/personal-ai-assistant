@@ -21,38 +21,51 @@ class MemoryManager:
             latest_message = db_service.get_chat_messages(chat_id)[-1]
             interaction_id = latest_message.interaction_id
         
-        # Create conversation for summarization
-        conversation = [
-            {'role': 'user', 'content': user_message},
-            {'role': 'assistant', 'content': assistant_response}
-        ]
-        
         try:
-            # Generate summary for this interaction
-            logger.info("Starting interaction summarization...")
+            # Generate summary for user message
+            logger.info("Starting user message summarization...")
             loop = asyncio.get_event_loop()
-            summary_result = await loop.run_in_executor(
+            user_summary_result = await loop.run_in_executor(
                 None,
                 self.summarizer.summarize,
-                conversation  # Only summarize current interaction
+                [{'role': 'user', 'content': user_message}],
+                "Describe very briefly what the user says or asks:"
             )
-            interaction_summary, processing_time = summary_result
+            user_summary, user_time = user_summary_result
+            logger.info(f"User summary generated in {user_time:.2f}s")
             
-            # Store interaction summary if we have database access
+            # Generate summary for assistant response
+            logger.info("Starting assistant response summarization...")
+            assistant_summary_result = await loop.run_in_executor(
+                None,
+                self.summarizer.summarize,
+                [{'role': 'assistant', 'content': assistant_response}],
+                "Describe very briefly what the assistant answered:"
+            )
+            assistant_summary, assistant_time = assistant_summary_result
+            
+            # Store interaction summaries if we have database access
             if chat_id is not None and db_service is not None:
-                db_service.add_interaction_summary(chat_id, interaction_id, interaction_summary)
+                db_service.add_interaction_summary(
+                    chat_id, 
+                    interaction_id, 
+                    user_summary,
+                    assistant_summary
+                )
             
-            logger.info(f"Interaction summary generated in {processing_time:.2f}s")
-            
-            # Now update the overall chat summary
-            self.conversation_history.extend(conversation)
+            # Update the overall chat summary
+            self.conversation_history.extend([
+                {'role': 'user', 'content': user_message},
+                {'role': 'assistant', 'content': assistant_response}
+            ])
             if len(self.conversation_history) > self.max_history_length * 2:
                 self.conversation_history = self.conversation_history[-self.max_history_length * 2:]
             
             overall_summary_result = await loop.run_in_executor(
                 None,
                 self.summarizer.summarize,
-                self.conversation_history
+                self.conversation_history,
+                "Summarize the entire conversation:"
             )
             overall_summary, _ = overall_summary_result
             

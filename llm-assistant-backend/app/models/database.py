@@ -37,7 +37,8 @@ class InteractionSummary(Base):
     id = Column(Integer, primary_key=True)
     chat_id = Column(Integer, ForeignKey('chats.id'), nullable=False)
     interaction_id = Column(Integer, nullable=False)
-    summary = Column(Text, nullable=False)
+    user_summary = Column(Text, nullable=False)  # Summary of what user asked
+    assistant_summary = Column(Text, nullable=False)  # Summary of assistant's response
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationship with chat

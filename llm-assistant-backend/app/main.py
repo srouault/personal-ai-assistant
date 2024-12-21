@@ -175,7 +175,10 @@ async def get_chat(chat_id: int):
     interaction_summaries = db_service.get_interaction_summaries(chat_id)
     
     # Create a dictionary of interaction summaries for easy lookup
-    summaries_dict = {s.interaction_id: s.summary for s in interaction_summaries}
+    summaries_dict = {s.interaction_id: {
+        'user_summary': s.user_summary,
+        'assistant_summary': s.assistant_summary
+    } for s in interaction_summaries}
     
     # Group messages by interaction_id
     interactions = []
@@ -183,10 +186,12 @@ async def get_chat(chat_id: int):
     
     for msg in messages:
         if current_interaction is None or msg.interaction_id != current_interaction['interaction_id']:
+            summaries = summaries_dict.get(msg.interaction_id, {})
             current_interaction = {
                 'interaction_id': msg.interaction_id,
                 'messages': [],
-                'summary': summaries_dict.get(msg.interaction_id)
+                'user_summary': summaries.get('user_summary'),
+                'assistant_summary': summaries.get('assistant_summary')
             }
             interactions.append(current_interaction)
         current_interaction['messages'].append({
