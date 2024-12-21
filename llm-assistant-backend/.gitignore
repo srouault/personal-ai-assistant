@@ -38,3 +38,5 @@ ENV/
 **/*.gguf
 
 .idea/*
+
+chat.db

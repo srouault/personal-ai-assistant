@@ -31,7 +31,25 @@ class DatabaseService:
     
     def add_message(self, chat_id: int, role: str, content: str) -> Message:
         with self.get_session() as session:
-            message = Message(chat_id=chat_id, role=role, content=content)
+            # Get the latest interaction_id for this chat
+            latest_message = session.query(Message)\
+                .filter(Message.chat_id == chat_id)\
+                .order_by(Message.interaction_id.desc())\
+                .first()
+            
+            # If this is a user message, increment the interaction_id
+            # If it's an assistant message, use the current interaction_id
+            if role == 'user':
+                interaction_id = (latest_message.interaction_id + 1) if latest_message else 1
+            else:  # assistant
+                interaction_id = latest_message.interaction_id if latest_message else 1
+            
+            message = Message(
+                chat_id=chat_id,
+                role=role,
+                content=content,
+                interaction_id=interaction_id
+            )
             session.add(message)
             
             # Update chat's updated_at timestamp
@@ -46,7 +64,8 @@ class DatabaseService:
         with self.get_session() as session:
             return session.query(Message)\
                 .filter(Message.chat_id == chat_id)\
-                .order_by(Message.created_at).all()
+                .order_by(Message.interaction_id, Message.role)\
+                .all()
     
     def update_chat_summary(self, chat_id: int, summary: str):
         with self.get_session() as session:
