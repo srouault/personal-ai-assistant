@@ -82,7 +82,9 @@ async def generate_stream(request: ChatRequest, chat_id: int):
         task = asyncio.create_task(
             memory_manager.add_exchange(
                 user_message,
-                full_response
+                full_response,
+                chat_id,  # Pass chat_id to memory manager
+                db_service  # Pass db_service to memory manager
             )
         )
         task.add_done_callback(

@@ -12,7 +12,7 @@ class MemoryManager:
         self.current_summary = None
         self.max_history_length = 10  # Maximum number of turns to keep
         
-    async def add_exchange(self, user_message, assistant_response):
+    async def add_exchange(self, user_message, assistant_response, chat_id=None, db_service=None):
         """Add a new exchange to the conversation history."""
         logger.info(f"Adding new exchange - User: {user_message[:50]}...")
         logger.info(f"Current history length: {len(self.conversation_history)}")
@@ -40,7 +40,11 @@ class MemoryManager:
                 self.summarizer.summarize,
                 self.conversation_history
             )
-            self.current_summary, processing_time = summary_result  # Unpack both values
+            self.current_summary, processing_time = summary_result
+            
+            # Update summary in database if chat_id and db_service are provided
+            if chat_id is not None and db_service is not None:
+                db_service.update_chat_summary(chat_id, self.current_summary)
             
             # Log summary with timing information
             logger.info("=== New Conversation Summary ===")
