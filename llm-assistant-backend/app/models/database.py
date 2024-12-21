@@ -12,10 +12,11 @@ class Chat(Base):
     title = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    summary = Column(Text, nullable=True)  # Latest conversation summary
+    summary = Column(Text, nullable=True)  # Overall chat summary
     
-    # Relationship with messages
+    # Relationships
     messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
+    interaction_summaries = relationship("InteractionSummary", back_populates="chat", cascade="all, delete-orphan")
 
 class Message(Base):
     __tablename__ = "messages"
@@ -29,3 +30,15 @@ class Message(Base):
     
     # Relationship with chat
     chat = relationship("Chat", back_populates="messages") 
+
+class InteractionSummary(Base):
+    __tablename__ = "interaction_summaries"
+    
+    id = Column(Integer, primary_key=True)
+    chat_id = Column(Integer, ForeignKey('chats.id'), nullable=False)
+    interaction_id = Column(Integer, nullable=False)
+    summary = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationship with chat
+    chat = relationship("Chat", back_populates="interaction_summaries")

@@ -169,10 +169,34 @@ async def get_chat(chat_id: int):
     chat = db_service.get_chat(chat_id)
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
+    
+    # Get messages and organize them by interaction
+    messages = db_service.get_chat_messages(chat_id)
+    interaction_summaries = db_service.get_interaction_summaries(chat_id)
+    
+    # Create a dictionary of interaction summaries for easy lookup
+    summaries_dict = {s.interaction_id: s.summary for s in interaction_summaries}
+    
+    # Group messages by interaction_id
+    interactions = []
+    current_interaction = None
+    
+    for msg in messages:
+        if current_interaction is None or msg.interaction_id != current_interaction['interaction_id']:
+            current_interaction = {
+                'interaction_id': msg.interaction_id,
+                'messages': [],
+                'summary': summaries_dict.get(msg.interaction_id)
+            }
+            interactions.append(current_interaction)
+        current_interaction['messages'].append({
+            'role': msg.role,
+            'content': msg.content
+        })
+    
     return {
         "id": chat.id,
         "title": chat.title,
-        "messages": [{"role": msg.role, "content": msg.content} 
-                    for msg in chat.messages],
-        "summary": chat.summary
+        "interactions": interactions,
+        "summary": chat.summary  # Overall chat summary
     }

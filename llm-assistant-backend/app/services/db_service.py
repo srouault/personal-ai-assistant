@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from ..models.database import Base, Chat, Message
+from ..models.database import Base, Chat, Message, InteractionSummary
 from typing import List, Optional
 from datetime import datetime
 
@@ -84,3 +84,30 @@ class DatabaseService:
                 session.commit()
                 session.refresh(chat)
             return chat
+    
+    def add_interaction_summary(self, chat_id: int, interaction_id: int, summary: str) -> InteractionSummary:
+        with self.get_session() as session:
+            interaction_summary = InteractionSummary(
+                chat_id=chat_id,
+                interaction_id=interaction_id,
+                summary=summary
+            )
+            session.add(interaction_summary)
+            session.commit()
+            session.refresh(interaction_summary)
+            return interaction_summary
+    
+    def get_interaction_summaries(self, chat_id: int) -> List[InteractionSummary]:
+        with self.get_session() as session:
+            return session.query(InteractionSummary)\
+                .filter(InteractionSummary.chat_id == chat_id)\
+                .order_by(InteractionSummary.interaction_id)\
+                .all()
+    
+    def get_interaction_summary(self, chat_id: int, interaction_id: int) -> Optional[InteractionSummary]:
+        with self.get_session() as session:
+            return session.query(InteractionSummary)\
+                .filter(
+                    InteractionSummary.chat_id == chat_id,
+                    InteractionSummary.interaction_id == interaction_id
+                ).first()

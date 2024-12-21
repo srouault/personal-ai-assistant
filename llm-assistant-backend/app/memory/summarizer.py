@@ -45,7 +45,7 @@ class ConversationSummarizer:
         logger.info(f"Conversation formatting took {format_time - start_time:.2f} seconds")
 
         # Add instructions as a separate prompt or use a system message if your pipeline supports it.
-        instructions = "Summarize the conversation between the user and the assistant. Describe what is being asked and answered in third person."
+        instructions = "Describe very briefly what the assistant answered:"
         full_input = instructions + formatted_convo
             
         logger.info(f"Formatted conversation: {formatted_convo[:200]}...")
@@ -53,7 +53,7 @@ class ConversationSummarizer:
         # Tokenize and move to device immediately
         tokenize_start = time.time()
         inputs = self.tokenizer(
-            formatted_convo,
+            full_input,
             max_length=1024,
             truncation=True,
             return_tensors="pt"
