@@ -38,6 +38,22 @@ class LlmAssistantFrontend extends LitElement {
     this.isLoading = false;
     this.waitingForFirstToken = false;
     this.selectedChatId = null;
+    this.initializeChat();
+  }
+
+  async initializeChat() {
+    try {
+      const response = await fetch('http://localhost:8080/chat/latest/id');
+      if (response.ok) {
+        const data = await response.json();
+        this.selectedChatId = (data.id || 0) + 1;
+        console.log('Initialized new chat with ID:', this.selectedChatId);
+      } else {
+        console.error('Failed to get latest chat ID');
+      }
+    } catch (error) {
+      console.error('Error initializing chat:', error);
+    }
   }
 
   async handleChatSelected(e) {
@@ -77,7 +93,16 @@ class LlmAssistantFrontend extends LitElement {
   }
 
   async sendMessage(e) {
-    if (!this.inputText.trim() || !this.selectedChatId) return;
+    if (!this.inputText.trim()) return;
+
+    if (!this.selectedChatId) {
+      await this.initializeChat();
+    }
+
+    if (!this.selectedChatId) {
+      console.error('Failed to initialize chat ID');
+      return;
+    }
 
     const userMessage = {
       role: 'user',
