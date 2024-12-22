@@ -37,6 +37,7 @@ export class ChatWindow extends LitElement {
         height: 100%;
         width: 100%;
         min-height: 0;
+        max-height: calc(88vh);
         overflow: hidden;
       }
 
@@ -150,6 +151,7 @@ export class ChatWindow extends LitElement {
       .title-container {
         flex: 0 0 auto;
         width: 100%;
+        border-bottom: 1px solid #555;
       }
 
       .text-center {

@@ -3,17 +3,32 @@ import { styles } from './styles.js';
 import { marked } from 'marked';
 import './components/chat-window.js';
 import './components/context-panel.js';
+import './components/chat-history.js';
 
 class LlmAssistantFrontend extends LitElement {
   static properties = {
     messages: { type: Array },
     inputText: { type: String },
     isLoading: { type: Boolean },
-    waitingForFirstToken: { type: Boolean }
+    waitingForFirstToken: { type: Boolean },
+    selectedChatId: { type: Number }
   };
 
   static styles = [
-    styles
+    styles,
+    css`
+      .app-container {
+        display: flex;
+        height: 100vh;
+      }
+
+      .main-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        max-width: calc(80vw - 300px);
+      }
+    `
   ];
 
   constructor() {
@@ -22,6 +37,39 @@ class LlmAssistantFrontend extends LitElement {
     this.inputText = '';
     this.isLoading = false;
     this.waitingForFirstToken = false;
+    this.selectedChatId = null;
+  }
+
+  async handleChatSelected(e) {
+    const chatId = e.detail;
+    this.selectedChatId = chatId;
+    try {
+      const response = await fetch(`http://localhost:8080/chats/${chatId}`);
+      if (response.ok) {
+        const chat = await response.json();
+        // Flatten the interactions into messages
+        this.messages = chat.interactions.flatMap(interaction => interaction.messages);
+      }
+    } catch (error) {
+      console.error('Error loading chat:', error);
+    }
+  }
+
+  async handleNewChat() {
+    try {
+      const response = await fetch('http://localhost:8000/chat/latest/id');
+      const data = await response.json();
+      const newChatId = (data.id || 0) + 1;
+      this.selectedChatId = newChatId;
+      this.messages = [];
+      // Refresh chat list
+      const chatHistoryElement = this.shadowRoot.querySelector('chat-history');
+      if (chatHistoryElement) {
+        chatHistoryElement.loadChats();
+      }
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+    }
   }
 
   handleInputChange(e) {
@@ -29,7 +77,7 @@ class LlmAssistantFrontend extends LitElement {
   }
 
   async sendMessage(e) {
-    if (!this.inputText.trim()) return;
+    if (!this.inputText.trim() || !this.selectedChatId) return;
 
     const userMessage = {
       role: 'user',
@@ -54,7 +102,7 @@ class LlmAssistantFrontend extends LitElement {
     this.messages = [...this.messages, assistantMessage];
 
     try {
-      const response = await fetch('http://localhost:8080/chat/stream', {
+      const response = await fetch(`http://localhost:8080/chat/stream?chat_id=${this.selectedChatId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -101,22 +149,38 @@ class LlmAssistantFrontend extends LitElement {
     } finally {
       this.isLoading = false;
       this.waitingForFirstToken = false;
+      // Refresh chat list to get updated summaries
+      const chatHistoryElement = this.shadowRoot.querySelector('chat-history');
+      if (chatHistoryElement) {
+        chatHistoryElement.loadChats();
+      }
     }
   }
 
   render() {
     return html`
-      <div class="relative">
-        <chat-window
-          .messages=${this.messages}
-          .inputText=${this.inputText}
-          .isLoading=${this.isLoading}
-          .waitingForFirstToken=${this.waitingForFirstToken}
-          @input-change=${this.handleInputChange}
-          @send-message=${this.sendMessage}
-        ></chat-window>
+      <div class="app-container">
+
+        <div class="history_content">
+          <chat-history
+            .selectedChatId=${this.selectedChatId}
+            @chat-selected=${this.handleChatSelected}
+          ></chat-history>
+        </div>
         
-        <context-panel></context-panel>
+        <div class="main-content">
+          <chat-window
+            .messages=${this.messages}
+            .inputText=${this.inputText}
+            .isLoading=${this.isLoading}
+            .waitingForFirstToken=${this.waitingForFirstToken}
+            @input-change=${this.handleInputChange}
+            @send-message=${this.sendMessage}
+            @new-chat=${this.handleNewChat}
+          ></chat-window>
+          
+          <context-panel></context-panel>
+        </div>
       </div>
     `;
   }

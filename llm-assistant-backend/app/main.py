@@ -65,9 +65,12 @@ async def generate_stream(request: ChatRequest, chat_id: int):
     try:
         last_message = request.messages[-1]
         user_message = last_message.content
-        
+
+        #only use last 5 messages for prompt
+        prompt_messages = request.messages[-5:]
+
         async for text in llm_service.generate_response_stream(
-            messages=request.messages,
+            messages=prompt_messages,
             temperature=request.temperature,
             max_tokens=request.max_tokens
         ):
