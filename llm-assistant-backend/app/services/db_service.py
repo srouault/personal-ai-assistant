@@ -24,6 +24,13 @@ class DatabaseService:
     def get_chat(self, chat_id: int) -> Optional[Chat]:
         with self.get_session() as session:
             return session.query(Chat).filter(Chat.id == chat_id).first()
+
+    def get_interaction_summaries(self, chat_id: int) -> List[InteractionSummary]:
+        with self.get_session() as session:
+            return session.query(InteractionSummary)\
+                .filter(InteractionSummary.chat_id == chat_id)\
+                .order_by(InteractionSummary.interaction_id)\
+                .all()
     
     def get_all_chats(self) -> List[Chat]:
         with self.get_session() as session:
@@ -118,3 +125,16 @@ class DatabaseService:
                     InteractionSummary.chat_id == chat_id,
                     InteractionSummary.interaction_id == interaction_id
                 ).first()
+
+    def get_latest_chat_id(self) -> Optional[int]:
+        with self.get_session() as session:
+            latest_chat = session.query(Chat).order_by(Chat.id.desc()).first()
+            return latest_chat.id if latest_chat else None
+
+    def get_latest_interaction_id(self, chat_id: int) -> Optional[int]:
+        with self.get_session() as session:
+            latest_interaction = session.query(Message)\
+                .filter(Message.chat_id == chat_id)\
+                .order_by(Message.interaction_id.desc())\
+                .first()
+            return latest_interaction.interaction_id if latest_interaction else None

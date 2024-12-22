@@ -16,3 +16,4 @@ black==23.1.0
 isort==5.12.0
 flake8==6.0.0
 aiohttp==3.8.5
+sentence-transformers>=2.2.2  # For KeyBERT's embedding models

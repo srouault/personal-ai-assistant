@@ -174,3 +174,34 @@ Answer: I don't have any relevant information in my context to answer this quest
         except Exception as e:
             logging.error(f"Error processing prompt: {str(e)}")
             return f"Error processing prompt: {str(e)}"
+
+    async def generate_summary(self, text: str, instruction: str, temperature: float = 0.3, max_tokens: int = 50) -> str:
+        """Generate a concise summary using the LLM."""
+        try:
+            # Create the prompt
+            prompt = f"""System: You are a precise summarization assistant. Your task is to create clear brief short 10 to 15 word summary.
+            
+Instruction: {instruction}
+
+Text to summarize:
+{text}
+
+Summary:"""
+
+            # Generate summary
+            response = self.llm(
+                prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=0.1,  # More focused sampling
+                top_k=10,
+                repeat_penalty=1.2,
+                stop=["Text to summarize:", "System:", "Instruction:", "Assistant:"],
+            )
+
+            return response['choices'][0]['text'].strip()
+
+        except Exception as e:
+            logging.error(f"Error generating summary: {str(e)}")
+            logging.exception("Full traceback:")
+            return f"Error generating summary: {str(e)}"

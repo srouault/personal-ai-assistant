@@ -31,14 +31,14 @@ app.add_middleware(
 )
 
 try:
-    # Initialize LLM service
+    # Initialize LLM service once
     llm_service = LLMService()
 except FileNotFoundError as e:
     logging.error(str(e))
     llm_service = None
 
-# Initialize memory manager (remove token)
-memory_manager = MemoryManager()
+# Initialize memory manager with the LLM service
+memory_manager = MemoryManager(llm_service)
 
 # Initialize services
 db_service = DatabaseService()
@@ -150,11 +150,10 @@ class LLMAssistant:
         
         # ... rest of your response generation logic ... 
 
-# New chat management endpoints
-@app.post("/chats")
-async def create_chat(title: str):
-    chat = db_service.create_chat(title)
-    return {"id": chat.id, "title": chat.title}
+@app.get("/chat/latest/id")
+async def get_latest_chat_id():
+    chat_id = db_service.get_latest_chat_id()
+    return {"id": chat_id}
 
 @app.get("/chats")
 async def list_chats():
