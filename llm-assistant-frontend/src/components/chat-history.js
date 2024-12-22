@@ -28,8 +28,8 @@ export class ChatHistory extends LitElement {
       .text-center {
         text-align: center;
         width: 100%;
-        height: 81px;
-        line-height: 45px;
+        height: 70px;
+        line-height: 32px;
         border-bottom: 1px solid #444;
         background-color: #1c1c1c;
       }
