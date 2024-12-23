@@ -9,6 +9,7 @@ torchaudio
 sqlalchemy
 sentencepiece==0.1.99
 accelerate==0.20.3
+keybert
 
 # Development dependencies
 pytest==7.4.0
