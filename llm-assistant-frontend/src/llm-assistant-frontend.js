@@ -63,8 +63,12 @@ class LlmAssistantFrontend extends LitElement {
       const response = await fetch(`http://localhost:8080/chats/${chatId}`);
       if (response.ok) {
         const chat = await response.json();
-        // Flatten the interactions into messages
-        this.messages = chat.interactions.flatMap(interaction => interaction.messages);
+        // Flatten the interactions into messages and ensure correct order
+        this.messages = chat.interactions
+          .flatMap(interaction => [
+            interaction.messages.find(m => m.role === 'user'),
+            interaction.messages.find(m => m.role === 'assistant')
+          ].filter(Boolean));  // filter out any undefined messages
       }
     } catch (error) {
       console.error('Error loading chat:', error);

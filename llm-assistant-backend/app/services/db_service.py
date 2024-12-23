@@ -79,7 +79,16 @@ class DatabaseService:
             chat = session.query(Chat).filter(Chat.id == chat_id).first()
             chat.summary = summary
             session.commit() 
-    
+
+    def delete_chat(self, chat_id: int):
+        with self.get_session() as session:
+            chat = session.query(Chat).filter(Chat.id == chat_id).first()
+            if chat:
+                session.delete(chat)
+                session.commit()
+                return True
+            return False
+
     def get_or_create_chat(self, chat_id: int, default_title: str = None) -> Chat:
         with self.get_session() as session:
             chat = session.query(Chat).filter(Chat.id == chat_id).first()

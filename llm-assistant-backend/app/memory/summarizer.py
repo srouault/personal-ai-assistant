@@ -87,7 +87,7 @@ class ConversationSummarizer:
                 # keywords is a list of tuples, first attribute of the tuple is the string, join all by comma
                 summary = ", ".join([keyword[0] for keyword in keywords])
                 # remove 'assistant,' and 'assistant' from the summary
-                summary = summary.replace('assistant,', '').replace('assistant', '')
+                summary = summary.replace('assistant,', '').replace(',assistant', '')
                 return summary, total_time
             except Exception as e:
                 logger.error(f"Error during summarization: {str(e)}")

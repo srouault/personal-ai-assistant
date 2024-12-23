@@ -137,7 +137,6 @@ export const styles = css`
     border-radius: 0.5rem;
     border: none;
     cursor: pointer;
-    min-width: 80px;
     font-weight: 500;
   }
 

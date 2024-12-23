@@ -5,7 +5,9 @@ export class ChatHistory extends LitElement {
   static properties = {
     chats: { type: Array },
     selectedChatId: { type: Number },
-    loading: { type: Boolean }
+    loading: { type: Boolean },
+    showDeleteModal: { type: Boolean },
+    chatToDelete: { type: Number }
   };
 
   static styles = [
@@ -32,10 +34,33 @@ export class ChatHistory extends LitElement {
         line-height: 32px;
         border-bottom: 1px solid #444;
         background-color: #1c1c1c;
+        flex-shrink: 0;
       }
 
       .hist-panel {
         padding: 0.5rem;
+        flex: 1;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #444 #1a1a1a;
+      }
+
+      .hist-panel::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .hist-panel::-webkit-scrollbar-track {
+        background: #1a1a1a;
+      }
+
+      .hist-panel::-webkit-scrollbar-thumb {
+        background-color: #444;
+        border-radius: 4px;
+        border: 2px solid #1a1a1a;
+      }
+
+      .hist-panel::-webkit-scrollbar-thumb:hover {
+        background-color: #555;
       }
 
       .chat-item {
@@ -46,6 +71,7 @@ export class ChatHistory extends LitElement {
         border: 1px solid #333;
         cursor: pointer;
         transition: all 0.2s ease;
+        position: relative;
       }
 
       .chat-item:hover {
@@ -94,6 +120,100 @@ export class ChatHistory extends LitElement {
         padding: 2rem;
         font-style: italic;
       }
+
+      .delete-btn {
+        display: block;
+        position: absolute;
+        right: 8px;
+        top: 8px;
+        width: 48px;
+        height: 48px;
+        padding: 4px;
+        border-radius: 4px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        opacity: 0;
+        transition: all 0.2s ease;
+      }
+
+      .chat-item:hover .delete-btn {
+        opacity: 1;
+      }
+
+      .delete-btn:hover {
+        background-color: #ff4444;
+      }
+
+      .delete-btn img {
+        width: 100%;
+        height: 100%;
+        filter: invert(0.6);
+      }
+
+      .delete-btn:hover img {
+        filter: invert(1);
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+
+      .modal {
+        background-color: #2a2a2a;
+        padding: 1.5rem;
+        border-radius: 8px;
+        min-width: 300px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .modal-title {
+        font-size: 1.2rem;
+        color: #e2e2e2;
+        margin-bottom: 1rem;
+      }
+
+      .modal-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin-top: 1.5rem;
+      }
+
+      .modal-btn {
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        font-weight: 500;
+      }
+
+      .cancel-btn {
+        background-color: #4a4a4a;
+        color: #e2e2e2;
+      }
+
+      .confirm-btn {
+        background-color: #ff4444;
+        color: white;
+      }
+
+      .cancel-btn:hover {
+        background-color: #5a5a5a;
+      }
+
+      .confirm-btn:hover {
+        background-color: #ff5555;
+      }
     `
   ];
 
@@ -102,6 +222,8 @@ export class ChatHistory extends LitElement {
     this.chats = [];
     this.selectedChatId = null;
     this.loading = false;
+    this.showDeleteModal = false;
+    this.chatToDelete = null;
     this.loadChats();
   }
 
@@ -128,18 +250,30 @@ export class ChatHistory extends LitElement {
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
     if (days === 0) {
-      return date.toLocaleTimeString(undefined, {
+      return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
       });
     } else if (days === 1) {
-      return 'Yesterday';
+      return `Yesterday ${date.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit'
+      })}`;
     } else if (days < 7) {
-      return date.toLocaleDateString(undefined, { weekday: 'long' });
+      return date.toLocaleString(undefined, {
+        weekday: 'long',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
     } else {
-      return date.toLocaleDateString(undefined, {
+      return date.toLocaleString(undefined, {
         month: 'short',
-        day: 'numeric'
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
       });
     }
   }
@@ -149,6 +283,43 @@ export class ChatHistory extends LitElement {
     this.dispatchEvent(new CustomEvent('chat-selected', {
       detail: chatId
     }));
+  }
+
+  async deleteChat(chatId) {
+    try {
+      const response = await fetch(`http://localhost:8080/chats/${chatId}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        await this.loadChats();  // Refresh the list
+        if (this.selectedChatId === chatId) {
+          this.dispatchEvent(new CustomEvent('chat-selected', { detail: null }));
+        }
+      } else {
+        console.error('Failed to delete chat');
+      }
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+    }
+  }
+
+  handleDeleteClick(e, chatId) {
+    e.stopPropagation();  // Prevent chat selection when clicking delete
+    this.chatToDelete = chatId;
+    this.showDeleteModal = true;
+  }
+
+  handleConfirmDelete() {
+    if (this.chatToDelete) {
+      this.deleteChat(this.chatToDelete);
+    }
+    this.showDeleteModal = false;
+    this.chatToDelete = null;
+  }
+
+  handleCancelDelete() {
+    this.showDeleteModal = false;
+    this.chatToDelete = null;
   }
 
   render() {
@@ -165,6 +336,12 @@ export class ChatHistory extends LitElement {
               class="chat-item ${chat.id === this.selectedChatId ? 'selected' : ''}"
               @click=${() => this.handleChatClick(chat.id)}
             >
+              <button 
+                class="delete-btn"
+                @click=${(e) => this.handleDeleteClick(e, chat.id)}
+              >
+                <img src="/assets/trash.png" alt="Delete">
+              </button>
               <div class="chat-date">
                 ${this.formatDate(chat.updated_at)}
               </div>
@@ -174,6 +351,23 @@ export class ChatHistory extends LitElement {
             </div>
           `)}
       </div>
+
+      ${this.showDeleteModal ? html`
+        <div class="modal-backdrop">
+          <div class="modal">
+            <div class="modal-title">Delete Chat</div>
+            <div>Are you sure you want to delete this chat?</div>
+            <div class="modal-buttons">
+              <button class="modal-btn cancel-btn" @click=${this.handleCancelDelete}>
+                Cancel
+              </button>
+              <button class="modal-btn confirm-btn" @click=${this.handleConfirmDelete}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
     `;
   }
 }

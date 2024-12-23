@@ -158,6 +158,13 @@ async def get_latest_chat_id():
     chat_id = db_service.get_latest_chat_id()
     return {"id": chat_id}
 
+@app.delete("/chats/{chat_id}")
+async def delete_chat(chat_id: int):
+    success = db_service.delete_chat(chat_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    return {"message": "Chat deleted successfully"}
+
 @app.get("/chats")
 async def list_chats():
     chats = db_service.get_all_chats()
