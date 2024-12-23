@@ -39,4 +39,4 @@ ENV/
 
 .idea/*
 
-chat.db
+chats.db
