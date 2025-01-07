@@ -21,65 +21,36 @@ class DocumentService:
         
         # Initialize ChromaDB
         self.persist_directory = "data/chromadb"
-        self.db = self._initialize_db()
+        self.context_collection = self._initialize_collection("context")
+        self.memory_collection = self._initialize_collection("memory")
         
-        logging.info("Vector store initialized")
+        logging.info("Vector store initialized with context and memory collections")
 
-    def _initialize_db(self) -> Chroma:
-        """Initialize or load existing ChromaDB"""
-        if os.path.exists(self.persist_directory):
-            return self._load_vector_db()
+    def _initialize_collection(self, collection_name: str) -> Chroma:
+        """Initialize or load existing ChromaDB collection"""
         return Chroma(
+            collection_name=collection_name,
             persist_directory=self.persist_directory,
             embedding_function=self.embedding_model
         )
 
-    def _load_vector_db(self) -> Chroma:
-        """Load existing vector database"""
-        return Chroma(
-            persist_directory=self.persist_directory,
-            embedding_function=self.embedding_model
-        )
-
-    def _chunk_text(self, text: str, chunk_size: int = 500) -> List[str]:
-        """Split text into chunks of approximately chunk_size characters"""
-        sentences = text.split('.')
-        chunks = []
-        current_chunk = []
-        current_size = 0
-        
-        for sentence in sentences:
-            sentence = sentence.strip() + '.'
-            sentence_size = len(sentence)
-            
-            if current_size + sentence_size > chunk_size and current_chunk:
-                chunks.append(' '.join(current_chunk))
-                current_chunk = [sentence]
-                current_size = sentence_size
-            else:
-                current_chunk.append(sentence)
-                current_size += sentence_size
-        
-        if current_chunk:
-            chunks.append(' '.join(current_chunk))
-        
-        return chunks
-
-    async def add_document(self, filename: str, content: bytes) -> str:
+    async def add_document(self, filename: str, content: bytes, collection: str = "context") -> str:
         try:
+            db = self.context_collection if collection == "context" else self.memory_collection
+            
             # Check if document with this filename already exists
-            existing_docs = self.db._collection.get(
+            existing_docs = db._collection.get(
                 where={"source": filename}
             )
             if existing_docs['ids']:
-                logging.info(f"Document {filename} already exists, skipping")
+                logging.info(f"Document {filename} already exists in {collection}, skipping")
                 return existing_docs['ids'][0]
 
             text = content.decode('utf-8')
             doc_id = str(uuid.uuid4())
             chunks = self._chunk_text(text)
             
-            logging.info(f"Processing document {filename} with {len(chunks)} chunks")
+            logging.info(f"Processing document {filename} with {len(chunks)} chunks for {collection}")
             
             documents = []
             for chunk in chunks:
@@ -88,19 +59,20 @@ class DocumentService:
                         page_content=chunk,
                         metadata={
                             "source": filename,
-                            "full_document": text
+                            "full_document": text,
+                            "collection": collection
                         }
                     )
                 )
             
-            self.db.add_documents(documents)
-            self.db.persist()
+            db.add_documents(documents)
+            db.persist()
             
-            logging.info(f"Successfully added document {filename} with ID {doc_id}")
+            logging.info(f"Successfully added document {filename} to {collection} with ID {doc_id}")
             return doc_id
             
         except Exception as e:
-            logging.error(f"Error adding document: {str(e)}")
+            logging.error(f"Error adding document to {collection}: {str(e)}")
             logging.exception("Full traceback:")
             raise
 
@@ -123,23 +95,25 @@ class DocumentService:
     async def query_documents(
         self, 
         query: str, 
+        collection: str = "context",
         num_results: int = 3, 
         min_relevance: Optional[RelevanceLevel] = None,
         min_similarity: Optional[float] = None
     ) -> QueryResponse:
         try:
-            logging.info(f"Querying documents with: '{query}'")
+            logging.info(f"Querying {collection} collection with: '{query}'")
             
-            doc_count = self.db._collection.count()
-            logging.info(f"Total documents in collection: {doc_count}")
+            db = self.context_collection if collection == "context" else self.memory_collection
+            doc_count = db._collection.count()
+            logging.info(f"Total documents in {collection} collection: {doc_count}")
             
             if doc_count == 0:
-                logging.warning("No documents in collection")
+                logging.warning(f"No documents in {collection} collection")
                 return QueryResponse(results=[], has_results=False)
             
             # Search in ChromaDB
-            logging.info(f"Searching for top {num_results * 2} results")
-            results = self.db.similarity_search_with_relevance_scores(
+            logging.info(f"Searching for top {num_results * 2} results in {collection}")
+            results = db.similarity_search_with_relevance_scores(
                 query,
                 k=num_results * 2  # Get more results to filter
             )
@@ -207,6 +181,7 @@ class DocumentService:
             # Search for relevant documents
             results = await self.query_documents(
                 query=prompt,
+                collection="context",
                 num_results=num_results,
                 min_similarity=min_similarity
             )
@@ -233,3 +208,42 @@ class DocumentService:
             logging.error(f"Error getting context: {str(e)}")
             logging.exception("Full traceback:")
             return ""
+
+    async def add_memory(self, content: str, metadata: Dict = None) -> str:
+        """Add a memory entry to the memory collection"""
+        try:
+            doc_id = str(uuid.uuid4())
+            memory_doc = Document(
+                page_content=content,
+                metadata={
+                    "source": f"memory_{doc_id}",
+                    "full_document": content,
+                    "collection": "memory",
+                    **(metadata or {})
+                }
+            )
+            
+            self.memory_collection.add_documents([memory_doc])
+            self.memory_collection.persist()
+            
+            logging.info(f"Successfully added memory with ID {doc_id}")
+            return doc_id
+            
+        except Exception as e:
+            logging.error(f"Error adding memory: {str(e)}")
+            logging.exception("Full traceback:")
+            raise
+
+    async def query_memory(
+        self, 
+        query: str, 
+        num_results: int = 3,
+        min_similarity: float = 0.1
+    ) -> QueryResponse:
+        """Specifically query the memory collection"""
+        return await self.query_documents(
+            query=query,
+            collection="memory",
+            num_results=num_results,
+            min_similarity=min_similarity
+        )

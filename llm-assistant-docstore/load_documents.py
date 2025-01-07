@@ -14,9 +14,10 @@ def load_documents(documents_dir="documents"):
         encode_kwargs={'normalize_embeddings': True}
     )
     
-    # Initialize ChromaDB
+    # Initialize ChromaDB with context collection
     persist_directory = "data/chromadb"
-    db = Chroma(
+    context_db = Chroma(
+        collection_name="context",  # Specify the context collection
         persist_directory=persist_directory,
         embedding_function=embedding_model
     )
@@ -31,11 +32,11 @@ def load_documents(documents_dir="documents"):
             source_name = os.path.basename(filename)
             
             # Check if document already exists in the DB
-            existing_docs = db._collection.get(
+            existing_docs = context_db._collection.get(
                 where={"source": source_name}
             )
             if existing_docs['ids']:
-                logging.info(f"Document {source_name} already exists in DB, skipping")
+                logging.info(f"Document {source_name} already exists in context collection, skipping")
                 continue
 
             if source_name in loaded_sources:
@@ -51,7 +52,8 @@ def load_documents(documents_dir="documents"):
                             page_content=text,
                             metadata={
                                 "source": source_name,  # Use normalized filename
-                                "full_document": text
+                                "full_document": text,
+                                "collection": "context"  # Add collection metadata
                             }
                         )
                     )
@@ -60,11 +62,11 @@ def load_documents(documents_dir="documents"):
             except Exception as e:
                 logging.error(f"Error loading {source_name}: {str(e)}")
 
-    # Add documents to ChromaDB
+    # Add documents to ChromaDB context collection
     if documents:
-        db.add_documents(documents)
-        db.persist()
-        logging.info(f"Added {len(documents)} documents to the vector store")
+        context_db.add_documents(documents)
+        context_db.persist()
+        logging.info(f"Added {len(documents)} documents to the context collection")
     else:
         logging.warning("No documents found to load")
 
