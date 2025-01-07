@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from app.models.chat import ChatRequest, ChatResponse
+from app.models.chat import ChatRequest, ChatResponse, ChatMessage
 from app.services.llm_service import LLMService
 import logging
 import json
@@ -32,7 +32,8 @@ app.add_middleware(
 
 try:
     # Initialize LLM service once
-    llm_service = LLMService()
+    db_service = DatabaseService()
+    llm_service = LLMService(db_service=db_service)
 except FileNotFoundError as e:
     logging.error(str(e))
     llm_service = None
@@ -62,6 +63,7 @@ async def health_check():
 
 async def generate_stream(request: ChatRequest, chat_id: int):
     full_response = ""
+    context_documents = []  # Store context document info
     try:
         last_message = request.messages[-1]
         user_message = last_message.content
@@ -69,10 +71,37 @@ async def generate_stream(request: ChatRequest, chat_id: int):
         #only use last 5 messages for prompt
         prompt_messages = request.messages[-5:]
 
+        try:
+            # Now you can use model.predict on new text
+            new_texts = [
+                user_message
+            ]
+            predictions = llm_service.classifier_model.predict(new_texts)
+            print(predictions)
+        except Exception as e:
+            logging.error(f"Error predicting prompt type: {str(e)}")
+            logging.exception("Full traceback:")
+
+        context = None
+
+        if user_message:
+
+            context_response = await llm_service.get_context(
+                user_message
+            )
+            context = context_response[0]
+            context_documents = context_response[1]
+            if context:
+                logging.info("Context found and will be used for response")
+                logging.debug(f"Context preview: {context[:200]}...")
+            else:
+                logging.info("No relevant context found")
+
         async for text in llm_service.generate_response_stream(
             messages=prompt_messages,
             temperature=request.temperature,
-            max_tokens=request.max_tokens
+            max_tokens=request.max_tokens,
+            context=context
         ):
             full_response += text
             yield f"data: {json.dumps({'text': text})}\n\n"
@@ -86,8 +115,9 @@ async def generate_stream(request: ChatRequest, chat_id: int):
             memory_manager.add_exchange(
                 user_message,
                 full_response,
-                chat_id,  # Pass chat_id to memory manager
-                db_service  # Pass db_service to memory manager
+                chat_id,
+                db_service,
+                context_documents  # Pass context documents to memory manager
             )
         )
         task.add_done_callback(
@@ -99,7 +129,7 @@ async def generate_stream(request: ChatRequest, chat_id: int):
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
 @app.post("/chat/stream")
-async def chat_stream(request: ChatRequest, chat_id: int = Query(1, description="Chat ID")):
+async def chat_stream(request: ChatRequest, chat_id: int):
     if llm_service is None:
         raise HTTPException(
             status_code=503,
@@ -113,11 +143,27 @@ async def chat_stream(request: ChatRequest, chat_id: int = Query(1, description=
     )
     
     # Store the user's message
-    db_service.add_message(chat_id, "user", request.messages[-1].content)
+    message = db_service.add_message(chat_id, "user", request.messages[-1].content)
     
+    # Create a new list of messages with the updated last message
+    messages = list(request.messages[:-1])  # Convert to list and exclude last message
+    messages.append(ChatMessage(
+        role=request.messages[-1].role,
+        content=request.messages[-1].content,
+        chat_id=chat_id,
+        interaction_id=message.interaction_id  # Use the interaction_id from the stored message
+    ))
+    
+    # Create a new request with the updated messages
+    updated_request = ChatRequest(
+        messages=messages,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens
+    )
+
     # Return a StreamingResponse
     return StreamingResponse(
-        generate_stream(request, chat_id),
+        generate_stream(updated_request, chat_id),
         media_type="text/event-stream"
     )
 
@@ -128,30 +174,6 @@ async def process_prompt(request: PromptRequest):
         return PromptResponse(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
-
-class LLMAssistant:
-    def __init__(self):
-        # ... existing initialization ...
-        self.memory_manager = MemoryManager()
-    
-    async def process_message(self, message: str) -> str:
-        # Get current conversation summary
-        current_summary = self.memory_manager.get_current_summary()
-        
-        # Process the message with the LLM (existing logic)
-        response = await self._generate_response(message, current_summary)
-        
-        # Update conversation memory
-        self.memory_manager.add_exchange(message, response)
-        
-        return response
-    
-    async def _generate_response(self, message: str, current_summary: str = None) -> str:
-        # Modify your existing response generation to include the summary in the prompt
-        context = f"Previous conversation summary: {current_summary}\n" if current_summary else ""
-        context += f"User message: {message}\n"
-        
-        # ... rest of your response generation logic ... 
 
 @app.get("/chat/latest/id")
 async def get_latest_chat_id():

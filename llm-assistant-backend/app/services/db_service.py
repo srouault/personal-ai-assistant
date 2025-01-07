@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from ..models.database import Base, Chat, Message, InteractionSummary
+from ..models.database import Base, Chat, Message, InteractionSummary, InteractionContext
 from typing import List, Optional
 from datetime import datetime
 
@@ -147,3 +147,22 @@ class DatabaseService:
                 .order_by(Message.interaction_id.desc())\
                 .first()
             return latest_interaction.interaction_id if latest_interaction else None
+
+    def add_interaction_context(
+        self,
+        chat_id: int,
+        interaction_id: int,
+        context_document_id: int,
+        similarity_score: float
+    ) -> InteractionContext:
+        with self.get_session() as session:
+            context = InteractionContext(
+                chat_id=chat_id,
+                interaction_id=interaction_id,
+                context_document_id=context_document_id,
+                similarity_score=similarity_score
+            )
+            session.add(context)
+            session.commit()
+            session.refresh(context)
+            return context

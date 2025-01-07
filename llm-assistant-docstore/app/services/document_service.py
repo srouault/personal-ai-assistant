@@ -9,6 +9,7 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain.schema import Document
 from app.models.document import QueryResponse, QueryResult, DocumentMetadata, RelevanceLevel
+from ..models.database import Document as DBDocument, SessionLocal
 
 class DocumentService:
     def __init__(self):
@@ -25,6 +26,8 @@ class DocumentService:
         self.memory_collection = self._initialize_collection("memory")
         
         logging.info("Vector store initialized with context and memory collections")
+        
+        self.db = SessionLocal()
 
     def _initialize_collection(self, collection_name: str) -> Chroma:
         """Initialize or load existing ChromaDB collection"""
@@ -130,6 +133,10 @@ class DocumentService:
             # Convert back to list and format results
             formatted_results = []
             for doc, similarity in source_results.values():
+                document_id = doc.metadata.get("document_id")
+                full_content = await self.get_document_content(document_id)
+                
+                # Get relevance level
                 relevance = self._get_relevance_level(similarity)
                 
                 # Apply filters
@@ -145,9 +152,10 @@ class DocumentService:
                     text=doc.page_content,
                     metadata=DocumentMetadata(
                         source=doc.metadata["source"],
-                        full_document=doc.metadata["full_document"],
+                        full_document=full_content,  # Get from SQLite
                         similarity=float(similarity),
-                        relevance=relevance
+                        relevance=relevance,
+                        document_id=document_id  # Add document_id to metadata
                     ),
                     is_relevant=self._is_relevant(relevance)
                 )
@@ -247,3 +255,13 @@ class DocumentService:
             num_results=num_results,
             min_similarity=min_similarity
         )
+
+    async def get_document_content(self, document_id: int) -> str:
+        """Retrieve full document content from SQLite"""
+        doc = self.db.query(DBDocument).filter_by(id=document_id).first()
+        return doc.content if doc else None
+
+    def __del__(self):
+        """Close DB connection when service is destroyed"""
+        if hasattr(self, 'db'):
+            self.db.close()

@@ -370,8 +370,8 @@ export class ContextPanel extends LitElement {
         },
         body: JSON.stringify({
           query: query,
-          num_results: 5,
-          min_similarity: 0.1
+          num_results: 3,
+          min_similarity: 0.2
         })
       });
 

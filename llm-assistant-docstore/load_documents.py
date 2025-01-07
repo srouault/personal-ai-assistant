@@ -3,13 +3,14 @@ os.environ["LANGCHAIN_DISABLE_TELEMETRY"] = "true"
 
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain.schema import Document
+from langchain.schema import Document as LangchainDocument
+from app.models.database import Document, SessionLocal
 import logging
 
 def load_documents(documents_dir="documents"):
     # Use the same embedding model configuration as DocumentService
     embedding_model = HuggingFaceEmbeddings(
-        model_name="models/embeddings",  # Local path to model
+        model_name="models/embeddings",
         model_kwargs={'device': 'cpu'},
         encode_kwargs={'normalize_embeddings': True}
     )
@@ -17,26 +18,26 @@ def load_documents(documents_dir="documents"):
     # Initialize ChromaDB with context collection
     persist_directory = "data/chromadb"
     context_db = Chroma(
-        collection_name="context",  # Specify the context collection
+        collection_name="context",
         persist_directory=persist_directory,
         embedding_function=embedding_model
     )
 
+    # Create DB session
+    db = SessionLocal()
+    
     # Load documents from the documents directory
-    documents = []
-    loaded_sources = set()  # Track which files we've already loaded
+    vector_documents = []
+    loaded_sources = set()
     
     for filename in os.listdir(documents_dir):
-        if filename.endswith(".txt"):  # Add more extensions if needed
-            # Use just the filename without directory prefix for consistency
+        if filename.endswith(".txt"):
             source_name = os.path.basename(filename)
             
-            # Check if document already exists in the DB
-            existing_docs = context_db._collection.get(
-                where={"source": source_name}
-            )
-            if existing_docs['ids']:
-                logging.info(f"Document {source_name} already exists in context collection, skipping")
+            # Check if document already exists in SQLite
+            existing_doc = db.query(Document).filter_by(filename=source_name).first()
+            if existing_doc:
+                logging.info(f"Document {source_name} already exists in database, skipping")
                 continue
 
             if source_name in loaded_sources:
@@ -47,13 +48,25 @@ def load_documents(documents_dir="documents"):
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     text = f.read()
-                    documents.append(
-                        Document(
+                    
+                    # Store full document in SQLite
+                    doc = Document(
+                        filename=source_name,
+                        content=text,
+                        collection='context'
+                    )
+                    db.add(doc)
+                    db.commit()
+                    db.refresh(doc)
+                    
+                    # Create vector store document with reference to SQLite document
+                    vector_documents.append(
+                        LangchainDocument(
                             page_content=text,
                             metadata={
-                                "source": source_name,  # Use normalized filename
-                                "full_document": text,
-                                "collection": "context"  # Add collection metadata
+                                "source": source_name,
+                                "document_id": doc.id,  # Reference to SQLite document
+                                "collection": "context"
                             }
                         )
                     )
@@ -61,14 +74,17 @@ def load_documents(documents_dir="documents"):
                 logging.info(f"Loaded document: {source_name}")
             except Exception as e:
                 logging.error(f"Error loading {source_name}: {str(e)}")
+                db.rollback()
 
     # Add documents to ChromaDB context collection
-    if documents:
-        context_db.add_documents(documents)
+    if vector_documents:
+        context_db.add_documents(vector_documents)
         context_db.persist()
-        logging.info(f"Added {len(documents)} documents to the context collection")
+        logging.info(f"Added {len(vector_documents)} documents to the context collection")
     else:
         logging.warning("No documents found to load")
+    
+    db.close()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

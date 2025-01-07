@@ -13,7 +13,7 @@ class MemoryManager:
         self.current_summary = None
         self.max_history_length = 5  # Maximum number of turns to keep
         
-    async def add_exchange(self, user_message, assistant_response, chat_id=None, db_service=None):
+    async def add_exchange(self, user_message, assistant_response, chat_id=None, db_service=None, context_documents=None):
         """Add a new exchange to the conversation history."""
         logger.info(f"Adding new exchange - User: {user_message[:50]}...")
         
@@ -47,6 +47,17 @@ class MemoryManager:
                     user_summary,
                     assistant_summary
                 )
+                
+            # Store context documents if provided
+            if context_documents:
+                for key in context_documents:
+                    doc = context_documents[key]
+                    db_service.add_interaction_context(
+                        chat_id=chat_id,
+                        interaction_id=interaction_id,
+                        context_document_id=doc['document_id'],
+                        similarity_score=doc['similarity']
+                    )
             
             # retrieve chat histroy from db
             chat_history = []

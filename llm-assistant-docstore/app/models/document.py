@@ -13,6 +13,7 @@ class DocumentMetadata(BaseModel):
     full_document: str
     similarity: float
     relevance: RelevanceLevel
+    document_id: Optional[int] = None
 
 class QueryResult(BaseModel):
     text: str

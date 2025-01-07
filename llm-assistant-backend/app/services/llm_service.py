@@ -8,8 +8,9 @@ import aiohttp
 import joblib
 
 class LLMService:
-    def __init__(self, docstore_url: str = "http://localhost:8001"):
+    def __init__(self, docstore_url: str = "http://localhost:8001", db_service=None):
         self.docstore_url = docstore_url
+        self.db_service = db_service
         model_path = os.getenv("MODEL_PATH")
         self.classifier_model = joblib.load("app/models/prompt_classifier.joblib")
 
@@ -42,32 +43,9 @@ Your responses should:
             logging.error(f"Error loading model: {str(e)}")
             raise
     
-    async def generate_response_stream(self, messages: list[ChatMessage], temperature: float = 0.15, max_tokens: int = 150) -> AsyncGenerator[str, None]:
+    async def generate_response_stream(self, messages: list[ChatMessage], temperature: float = 0.15, max_tokens: int = 150, context: str = None) -> AsyncGenerator[str, None]:
         try:
-            # Get the last user message to fetch relevant context
-            last_user_message = next((msg.content for msg in reversed(messages) if msg.role == "user"), None)
 
-            try:
-                # Now you can use model.predict on new text
-                new_texts = [
-                    last_user_message
-                ]
-                predictions = self.classifier_model.predict(new_texts)
-                print(predictions)
-            except Exception as e:
-                logging.error(f"Error predicting prompt type: {str(e)}")
-                logging.exception("Full traceback:")
-
-            context = None
-            
-            if last_user_message:
-                # Fetch context for the last user message
-                context = await self.get_context(last_user_message)
-                if context:
-                    logging.info("Context found and will be used for response")
-                    logging.debug(f"Context preview: {context[:200]}...")
-                else:
-                    logging.info("No relevant context found")
 
             # Build the prompt with system message and context
             formatted_messages = [f"System: {self.system_prompt}"]
@@ -118,8 +96,8 @@ Your responses should:
                     f"{self.docstore_url}/query",
                     json={
                         "query": query,
-                        "num_results": 2,
-                        "min_similarity": 0.1
+                        "num_results": 3,
+                        "min_similarity": 0.2
                     }
                 ) as response:
                     if response.status == 200:
@@ -135,30 +113,36 @@ Your responses should:
                                 # Only add if we haven't seen this source before
                                 if source not in unique_contexts:
                                     full_doc = doc_result["metadata"]["full_document"]
-                                    unique_contexts[source] = f"Source: {source}\n\n{full_doc}"
+                                    unique_contexts[source] = {
+                                        'text': f"Source: {source}\n\n{full_doc}",
+                                        'document_id': doc_result["metadata"].get("document_id"),
+                                        'similarity': doc_result["metadata"]["similarity"]
+                                    }
                             
                             if not unique_contexts:
-                                return None
-                            
+                                return None,None
+
                             # Combine unique contexts with separators
-                            context = "\n\n---\n\n".join(unique_contexts.values())
+                            context = "\n\n---\n\n".join(
+                                context_info['text'] for context_info in unique_contexts.values()
+                            )
                             logging.info(f"Found {len(unique_contexts)} unique documents for context")
-                            return context
+                            return context, unique_contexts
                             
-                        return None
+                        return None,None
                     else:
                         logging.error(f"Error fetching context: {response.status}")
-                        return None
+                        return None,None
 
         except Exception as e:
             logging.error(f"Error getting context: {str(e)}", exc_info=True)
-            return None
+            return None,None
 
     async def process_prompt(self, prompt: str) -> str:
         """Process a prompt with context from the document store"""
         try:
-            context = await self.get_context(prompt)
-            
+            response = await self.get_context(prompt)
+            context = response[0] if response else None
             if context:
                 full_prompt = f"""{self.system_prompt}
 
