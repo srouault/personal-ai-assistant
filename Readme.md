@@ -2,12 +2,12 @@
 
 Run a personalized AI chat assistant on your local system, that you are able to 'teach' new information, without exposing it to the outside world and the privacy concerns that come with it. You can do this by simply placing some text documents in the llm-assistant-docstore/documents folder and run load_documents.py. Now you can converse with AI about new topics, made possible through the use of text embeddings, a vector database and semantic search capabilities, also referred to as RAG (Retrieval-Augmented Generation). 
 
-
-![image](Chat.png)
+Chat with the assistant, keep track of chat history and start new chats.
+![image](Chat.png?version=1)
 
 
 Context Panel, showing the documents that are available to the AI
-![image](Context.png)
+![image](Context.png?version=1)
 
 ### Installation Prerequisites
 
