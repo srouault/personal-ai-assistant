@@ -41,5 +41,6 @@ data/
 
 models/embeddings/
 
+documents/*
 
 .idea/*
