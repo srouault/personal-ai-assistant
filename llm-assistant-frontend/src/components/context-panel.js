@@ -28,9 +28,27 @@ export class ContextPanel extends LitElement {
       pointer-events: none;
     }
 
+    .backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0);
+      transition: background-color 0.3s ease;
+      pointer-events: none;
+      z-index: 40;
+    }
+
+    .backdrop.visible {
+      background-color: rgba(0, 0, 0, 0.5);
+      pointer-events: auto;
+    }
+
     .panel-wrapper {
       height: 100%;
       position: relative;
+      z-index: 50;
     }
 
     .panel-container {
@@ -394,6 +412,9 @@ export class ContextPanel extends LitElement {
 
   render() {
     return html`
+      <div class="backdrop ${this.isVisible ? 'visible' : ''}" 
+           @click=${() => this.togglePanel()}>
+      </div>
       <div class="panel-wrapper">
         <div class="full-document-view ${this.selectedContext ? 'visible' : ''}"
              @click=${(e) => e.target === e.currentTarget && this.closeDocument()}>

@@ -1,0 +1,375 @@
+import { LitElement, html, css } from 'lit';
+import { styles } from '../styles.js';
+
+export class ChatHistory extends LitElement {
+  static properties = {
+    chats: { type: Array },
+    selectedChatId: { type: Number },
+    loading: { type: Boolean },
+    showDeleteModal: { type: Boolean },
+    chatToDelete: { type: Number }
+  };
+
+  static styles = [
+    styles,
+    css`
+      :host {
+        display: flex;
+        flex-direction: column;
+        margin-top: 0px;
+        width: 300px;
+        height: 100%;
+        background-color: #1a1a1a;
+      }
+
+      .loading {
+        opacity: 0.7;
+        pointer-events: none;
+      }
+
+      .text-center {
+        text-align: center;
+        width: 100%;
+        height: 70px;
+        line-height: 32px;
+        border-bottom: 1px solid #444;
+        background-color: #1c1c1c;
+        flex-shrink: 0;
+      }
+
+      .hist-panel {
+        padding: 0.5rem;
+        flex: 1;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #444 #1a1a1a;
+      }
+
+      .hist-panel::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .hist-panel::-webkit-scrollbar-track {
+        background: #1a1a1a;
+      }
+
+      .hist-panel::-webkit-scrollbar-thumb {
+        background-color: #444;
+        border-radius: 4px;
+        border: 2px solid #1a1a1a;
+      }
+
+      .hist-panel::-webkit-scrollbar-thumb:hover {
+        background-color: #555;
+      }
+
+      .chat-item {
+        padding: 12px;
+        margin-bottom: 8px;
+        border-radius: 8px;
+        background-color: #2a2a2a;
+        border: 1px solid #333;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        position: relative;
+      }
+
+      .chat-item:hover {
+        background-color: #333;
+        transform: translateX(4px);
+      }
+
+      .chat-item.selected {
+        background-color: #3a3a3a;
+        border-color: #4a4a4a;
+        position: relative;
+      }
+
+      .chat-item.selected::before {
+        content: '';
+        position: absolute;
+        left: -0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 4px;
+        height: 70%;
+        background-color: #3b82f6;
+        border-radius: 2px;
+      }
+
+      .chat-date {
+        font-size: 0.75rem;
+        color: #888;
+        margin-bottom: 4px;
+      }
+
+      .chat-summary {
+        font-size: 0.875rem;
+        color: #ccc;
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+      }
+
+      .no-chats {
+        color: #666;
+        text-align: center;
+        padding: 2rem;
+        font-style: italic;
+      }
+
+      .delete-btn {
+        display: block;
+        position: absolute;
+        right: 8px;
+        top: 8px;
+        width: 48px;
+        height: 48px;
+        padding: 4px;
+        border-radius: 4px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        opacity: 0;
+        transition: all 0.2s ease;
+      }
+
+      .chat-item:hover .delete-btn {
+        opacity: 1;
+      }
+
+      .delete-btn:hover {
+        background-color: #ff4444;
+      }
+
+      .delete-btn img {
+        width: 100%;
+        height: 100%;
+        filter: invert(0.6);
+      }
+
+      .delete-btn:hover img {
+        filter: invert(1);
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+      }
+
+      .modal {
+        background-color: #2a2a2a;
+        padding: 1.5rem;
+        border-radius: 8px;
+        min-width: 300px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .modal-title {
+        font-size: 1.2rem;
+        color: #e2e2e2;
+        margin-bottom: 1rem;
+      }
+
+      .modal-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin-top: 1.5rem;
+      }
+
+      .modal-btn {
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        font-weight: 500;
+      }
+
+      .cancel-btn {
+        background-color: #4a4a4a;
+        color: #e2e2e2;
+      }
+
+      .confirm-btn {
+        background-color: #ff4444;
+        color: white;
+      }
+
+      .cancel-btn:hover {
+        background-color: #5a5a5a;
+      }
+
+      .confirm-btn:hover {
+        background-color: #ff5555;
+      }
+    `
+  ];
+
+  constructor() {
+    super();
+    this.chats = [];
+    this.selectedChatId = null;
+    this.loading = false;
+    this.showDeleteModal = false;
+    this.chatToDelete = null;
+    this.loadChats();
+  }
+
+  async loadChats() {
+    this.loading = true;
+    try {
+      const response = await fetch('http://localhost:8080/chats');
+      if (response.ok) {
+        this.chats = await response.json();
+      } else {
+        console.error('Failed to load chats');
+      }
+    } catch (error) {
+      console.error('Error loading chats:', error);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  formatDate(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now - date;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (days === 0) {
+      return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } else if (days === 1) {
+      return `Yesterday ${date.toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit'
+      })}`;
+    } else if (days < 7) {
+      return date.toLocaleString(undefined, {
+        weekday: 'long',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } else {
+      return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+  }
+
+  handleChatClick(chatId) {
+    this.selectedChatId = chatId;
+    this.dispatchEvent(new CustomEvent('chat-selected', {
+      detail: chatId
+    }));
+  }
+
+  async deleteChat(chatId) {
+    try {
+      const response = await fetch(`http://localhost:8080/chats/${chatId}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        await this.loadChats();  // Refresh the list
+        if (this.selectedChatId === chatId) {
+          this.dispatchEvent(new CustomEvent('chat-selected', { detail: null }));
+        }
+      } else {
+        console.error('Failed to delete chat');
+      }
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+    }
+  }
+
+  handleDeleteClick(e, chatId) {
+    e.stopPropagation();  // Prevent chat selection when clicking delete
+    this.chatToDelete = chatId;
+    this.showDeleteModal = true;
+  }
+
+  handleConfirmDelete() {
+    if (this.chatToDelete) {
+      this.deleteChat(this.chatToDelete);
+    }
+    this.showDeleteModal = false;
+    this.chatToDelete = null;
+  }
+
+  handleCancelDelete() {
+    this.showDeleteModal = false;
+    this.chatToDelete = null;
+  }
+
+  render() {
+    return html`
+      <div class="text-center">
+        <h2>Chat History</h2>
+      </div>
+
+      <div class="hist-panel ${this.loading ? 'loading' : ''}">
+        ${this.chats.length === 0 
+          ? html`<div class="no-chats">No chat history found</div>`
+          : this.chats.map(chat => html`
+            <div 
+              class="chat-item ${chat.id === this.selectedChatId ? 'selected' : ''}"
+              @click=${() => this.handleChatClick(chat.id)}
+            >
+              <button 
+                class="delete-btn"
+                @click=${(e) => this.handleDeleteClick(e, chat.id)}
+              >
+                <img src="/assets/trash.png" alt="Delete">
+              </button>
+              <div class="chat-date">
+                ${this.formatDate(chat.updated_at)}
+              </div>
+              <div class="chat-summary">
+                ${chat.summary || 'No summary available'}
+              </div>
+            </div>
+          `)}
+      </div>
+
+      ${this.showDeleteModal ? html`
+        <div class="modal-backdrop">
+          <div class="modal">
+            <div class="modal-title">Delete Chat</div>
+            <div>Are you sure you want to delete this chat?</div>
+            <div class="modal-buttons">
+              <button class="modal-btn cancel-btn" @click=${this.handleCancelDelete}>
+                Cancel
+              </button>
+              <button class="modal-btn confirm-btn" @click=${this.handleConfirmDelete}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+    `;
+  }
+}
+
+customElements.define('chat-history', ChatHistory); 

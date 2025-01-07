@@ -5,7 +5,7 @@ import os
 if __name__ == "__main__":
     load_dotenv()
     
-    os.environ["MODEL_PATH"] = "app/models/Qwen2-7B-Instruct.Q6_K.gguf"
+    os.environ["MODEL_PATH"] = "app/models/Qwen2-7B-Instruct.Q5_K_M.gguf"
 
     uvicorn.run(
         "app.main:app",

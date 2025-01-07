@@ -5,12 +5,14 @@ from pathlib import Path
 from typing import Generator, Optional, AsyncGenerator
 import logging
 import aiohttp
+import joblib
 
 class LLMService:
     def __init__(self, docstore_url: str = "http://localhost:8001"):
         self.docstore_url = docstore_url
         model_path = os.getenv("MODEL_PATH")
-        
+        self.classifier_model = joblib.load("app/models/prompt_classifier.joblib")
+
         # Define system prompts
         self.system_prompt = """You are a helpful AI assistant that provides accurate information based strictly on the given context. 
 Your responses should:
@@ -44,6 +46,18 @@ Your responses should:
         try:
             # Get the last user message to fetch relevant context
             last_user_message = next((msg.content for msg in reversed(messages) if msg.role == "user"), None)
+
+            try:
+                # Now you can use model.predict on new text
+                new_texts = [
+                    last_user_message
+                ]
+                predictions = self.classifier_model.predict(new_texts)
+                print(predictions)
+            except Exception as e:
+                logging.error(f"Error predicting prompt type: {str(e)}")
+                logging.exception("Full traceback:")
+
             context = None
             
             if last_user_message:
@@ -174,3 +188,34 @@ Answer: I don't have any relevant information in my context to answer this quest
         except Exception as e:
             logging.error(f"Error processing prompt: {str(e)}")
             return f"Error processing prompt: {str(e)}"
+
+    async def generate_summary(self, text: str, instruction: str, temperature: float = 0.3, max_tokens: int = 50) -> str:
+        """Generate a concise summary using the LLM."""
+        try:
+            # Create the prompt
+            prompt = f"""System: You are a precise summarization assistant. Your task is to create clear brief short 10 to 15 word summary.
+            
+Instruction: {instruction}
+
+Text to summarize:
+{text}
+
+Summary:"""
+
+            # Generate summary
+            response = self.llm(
+                prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=0.1,  # More focused sampling
+                top_k=10,
+                repeat_penalty=1.2,
+                stop=["Text to summarize:", "System:", "Instruction:", "Assistant:"],
+            )
+
+            return response['choices'][0]['text'].strip()
+
+        except Exception as e:
+            logging.error(f"Error generating summary: {str(e)}")
+            logging.exception("Full traceback:")
+            return f"Error generating summary: {str(e)}"

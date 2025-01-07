@@ -3,9 +3,8 @@ import { css } from 'lit';
 export const styles = css`
   :host {
     display: block;
-    min-height: 600px;
-    height: 66.67vh;
-    width: 900px;
+    height: 88vh;
+    width: 80%;
     margin: 2rem auto;
     border-radius: 0.75rem;
     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3);
@@ -138,7 +137,6 @@ export const styles = css`
     border-radius: 0.5rem;
     border: none;
     cursor: pointer;
-    min-width: 80px;
     font-weight: 500;
   }
 

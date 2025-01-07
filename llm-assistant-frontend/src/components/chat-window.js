@@ -31,12 +31,53 @@ export class ChatWindow extends LitElement {
         margin: 0;
       }
 
+      .header-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 2rem;
+        border-bottom: 1px solid #555;
+        background-color: #2a2a2a;
+
+      }
+
+      .title {
+        font-size: 2rem;
+        font-weight: 600;
+        color: #e2e2e2;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .new-chat-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background-color: #2563eb;
+        border: none;
+        border-radius: 0.5rem;
+        color: white;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      .new-chat-btn:hover {
+        background-color: #1d4ed8;
+      }
+
+      .new-chat-btn img {
+        width: 20px;
+        height: 20px;
+      }
+
       .chat-container {
         display: flex;
         flex-direction: column;
         height: 100%;
         width: 100%;
         min-height: 0;
+        max-height: calc(88vh);
         overflow: hidden;
       }
 
@@ -150,6 +191,7 @@ export class ChatWindow extends LitElement {
       .title-container {
         flex: 0 0 auto;
         width: 100%;
+        border-bottom: 1px solid #555;
       }
 
       .text-center {
@@ -267,8 +309,12 @@ export class ChatWindow extends LitElement {
   render() {
     return html`
       <div class="chat-container">
-        <div class="title-container border-b border-gray-200 bg-white py-6">
-          <h1 class="text-2xl font-semibold text-gray-800 text-center m-0">Personal AI Assistant</h1>
+        <div class="header-container">
+          <div class="title">Personal AI Assistant</div>
+          <button class="new-chat-btn" @click=${() => window.location.reload()}>
+            <img src="/assets/compose_3.png" alt="New Chat">
+            New Chat
+          </button>
         </div>
 
         <div class="messages-container bg-gray-100">
