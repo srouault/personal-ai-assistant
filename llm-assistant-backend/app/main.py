@@ -82,6 +82,10 @@ async def generate_stream(request: ChatRequest, chat_id: int):
             logging.error(f"Error predicting prompt type: {str(e)}")
             logging.exception("Full traceback:")
 
+        # if predictions[0] == 'Continuation' then we need to get the context for the previous message
+        # if predictions[0] == 'New' then we need to get the context for last message
+        # if predictions[0] == 'Reference' then we need to get the a memory reference, and get the context for that
+
         context = None
 
         if user_message:
