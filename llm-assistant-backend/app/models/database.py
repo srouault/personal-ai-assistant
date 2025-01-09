@@ -51,8 +51,9 @@ class InteractionContext(Base):
     id = Column(Integer, primary_key=True)
     chat_id = Column(Integer, ForeignKey('chats.id'), nullable=False)
     interaction_id = Column(Integer, nullable=False)
-    context_document_id = Column(Integer, nullable=False)  # ID from documents.db
-    similarity_score = Column(Float, nullable=False)
+    context_document_id = Column(Integer, nullable=True)  # ID from documents.db
+    context_memory_message_id = Column(Integer, nullable=True)
+    similarity_score = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationship with chat

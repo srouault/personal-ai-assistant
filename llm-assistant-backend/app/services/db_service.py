@@ -1,14 +1,17 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from ..models.database import Base, Chat, Message, InteractionSummary, InteractionContext
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
+import aiohttp
+import logging
 
 class DatabaseService:
     def __init__(self, database_url: str = "sqlite:///./chats.db"):
         self.engine = create_engine(database_url)
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine)
+        self.docstore_url = "http://localhost:8001"  # Docstore service URL
     
     def get_session(self) -> Session:
         return self.SessionLocal()
@@ -65,7 +68,7 @@ class DatabaseService:
             
             session.commit()
             session.refresh(message)
-            return message
+            return message, chat_id, interaction_id
     
     def get_chat_messages(self, chat_id: int) -> List[Message]:
         with self.get_session() as session:
@@ -152,17 +155,117 @@ class DatabaseService:
         self,
         chat_id: int,
         interaction_id: int,
-        context_document_id: int,
-        similarity_score: float
+        context_document_id: Optional[int] = None,
+        similarity_score: Optional[float] = None,
+        memory_msg_id: Optional[int] = None
     ) -> InteractionContext:
         with self.get_session() as session:
             context = InteractionContext(
                 chat_id=chat_id,
                 interaction_id=interaction_id,
                 context_document_id=context_document_id,
-                similarity_score=similarity_score
+                similarity_score=similarity_score,
+                context_memory_message_id=memory_msg_id
             )
             session.add(context)
             session.commit()
             session.refresh(context)
             return context
+
+    async def get_document_content(self, document_id: int) -> Optional[str]:
+        """Retrieve document content from docstore service"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.docstore_url}/documents/{document_id}") as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        return result.get("content")
+                    else:
+                        logging.error(f"Error fetching document {document_id}: {response.status}")
+                        return None
+        except Exception as e:
+            logging.error(f"Error getting document content: {str(e)}")
+            logging.exception("Full traceback:")
+            return None
+
+    async def get_interaction_contexts(self, chat_id: int, interaction_id: int) -> List[Dict]:
+        """
+        Retrieve context documents for a specific chat interaction
+        Returns a list of dicts containing document content and metadata
+        """
+        with self.get_session() as session:
+            contexts = session.query(InteractionContext)\
+                .filter(
+                    InteractionContext.chat_id == chat_id,
+                    InteractionContext.interaction_id == interaction_id
+                )\
+                .all()
+            
+            result = []
+            for context in contexts:
+                if context.context_document_id is not None:
+
+
+                    # Get the full document content from docstore service
+                    document_content = await self.get_document_content(
+                        context.context_document_id
+                    )
+                elif context.context_memory_message_id is not None:
+                    # Get the assistant message content from the database
+                    document_content = await self.get_message_by_id(context.context_memory_message_id)
+                
+                if document_content:
+                    result.append({
+                        'document_id': context.context_document_id,
+                        'message_id': context.context_memory_message_id,
+                        'content': document_content,
+                        'similarity_score': context.similarity_score,
+                        'created_at': context.created_at
+                    })
+            
+            return result
+
+    async def get_last_interaction_contexts(self, chat_id: int) -> List[Dict]:
+        """
+        Retrieve context documents for the most recent interaction of a chat
+        Returns a list of dicts containing document content and metadata
+        """
+        with self.get_session() as session:
+            # First get the latest interaction_id for this chat
+            latest_interaction = session.query(InteractionContext)\
+                .filter(InteractionContext.chat_id == chat_id)\
+                .order_by(InteractionContext.interaction_id.desc())\
+                .first()
+            
+            if not latest_interaction:
+                return []
+            
+            # Then get all contexts for this interaction
+            return await self.get_interaction_contexts(
+                chat_id=chat_id,
+                interaction_id=latest_interaction.interaction_id
+            )
+
+    async def get_assistant_message_id_and_content_by_chat_id_interaction_id(self, chat_id: int, interaction_id: int, role: str = "assistant") -> List[Dict]:
+        with self.get_session() as session:
+            messages = session.query(Message)\
+                .filter(
+                    Message.chat_id == chat_id,
+                    Message.interaction_id == interaction_id,
+                    Message.role == role
+                )\
+                .all()
+
+            result = []
+            for message in messages:
+                result.append({
+                    'message_id': message.id,
+                    'content': message.content
+                })
+
+            return result
+
+    async def get_message_by_id(self, message_id: int) -> Optional[str]:
+        with self.get_session() as session:
+            message = session.query(Message).filter(Message.id == message_id).first()
+            return message.content if message else None

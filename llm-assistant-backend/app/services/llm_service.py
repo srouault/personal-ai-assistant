@@ -15,8 +15,13 @@ class LLMService:
         self.classifier_model = joblib.load("app/models/prompt_classifier.joblib")
 
         # Define system prompts
-        self.system_prompt = """You are a helpful AI assistant that provides accurate information based strictly on the given context. 
-Your responses should:
+        self.system_prompt = """You are a helpful AI assistant with access to previous conversation history. 
+When given context about previous conversations:
+1. First acknowledge the previous conversation, mentioning when it happened
+2. Briefly summarize what was discussed
+3. Then use that context to answer the current question
+
+When given factual context:
 1. Only use information explicitly stated in the provided context
 2. Say "I don't have enough information" when no context is provided unless the the user has a factual question
 3. Never make assumptions or infer details on questions or topics that are not factual

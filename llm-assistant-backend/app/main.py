@@ -3,13 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from app.models.chat import ChatRequest, ChatResponse, ChatMessage
 from app.services.llm_service import LLMService
+from app.services.memory_service import MemoryService
 import logging
 import json
 from pydantic import BaseModel
 from .memory.memory_manager import MemoryManager
 import asyncio
 from .services.db_service import DatabaseService
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 # Configure logging at the top of main.py
@@ -43,6 +44,8 @@ memory_manager = MemoryManager(llm_service)
 
 # Initialize services
 db_service = DatabaseService()
+llm_service = LLMService(db_service=db_service)
+memory_service = MemoryService()
 
 class PromptRequest(BaseModel):
     prompt: str
@@ -71,35 +74,90 @@ async def generate_stream(request: ChatRequest, chat_id: int):
         #only use last 5 messages for prompt
         prompt_messages = request.messages[-5:]
 
+        # Get context based on query type
+        context = None
+        memory_assistant_msg = None
+        prediction = "New"  # Default to new query type
+        
         try:
             # Now you can use model.predict on new text
-            new_texts = [
-                user_message
-            ]
+            new_texts = [user_message]
             predictions = llm_service.classifier_model.predict(new_texts)
-            print(predictions)
+            prediction = predictions[0]
+            logging.info(f"Query classified as: {prediction}")
         except Exception as e:
             logging.error(f"Error predicting prompt type: {str(e)}")
             logging.exception("Full traceback:")
 
-        # if predictions[0] == 'Continuation' then we need to get the context for the previous message
-        # if predictions[0] == 'New' then we need to get the context for last message
-        # if predictions[0] == 'Reference' then we need to get the a memory reference, and get the context for that
-
-        context = None
-
-        if user_message:
-
-            context_response = await llm_service.get_context(
-                user_message
+        if prediction == "Continuation":
+            # Get context from the previous interaction
+            previous_contexts = await db_service.get_last_interaction_contexts(chat_id)
+            if previous_contexts:
+                context = "\n\n---\n\n".join(
+                    f"Source: Previous context\n\n{ctx['content']}"
+                    for ctx in previous_contexts
+                )
+                context_documents = {
+                    str(ctx['document_id']): {
+                        'document_id': ctx['document_id'],
+                        'similarity': ctx['similarity_score']
+                    }
+                    for ctx in previous_contexts
+                }
+                logging.info("Using context from previous interaction")
+        
+        elif prediction == "Reference":
+            # Query memory collection first
+            memory_results = await memory_service.query_memories(
+                query=user_message,
+                num_results=2,
+                min_similarity=0.001
             )
+            
+            if memory_results and memory_results.get("has_results"):
+                # Format memory results for a more natural response
+                memory_prompts = []
+                for mem in memory_results["results"]:
+                    mem_chat_id  = mem['chat_id']
+                    mem_interaction_id = mem['interaction_id']
+
+                    memory_assistant_msg = await db_service.get_assistant_message_id_and_content_by_chat_id_interaction_id(chat_id=mem_chat_id, interaction_id=mem_interaction_id)
+
+                    # Parse the timestamp to a more readable format
+                    timestamp = datetime.fromisoformat(mem['timestamp'])
+                    formatted_time = timestamp.strftime("%A the %d of %B at %I:%M %p")
+                    
+                    memory_prompts.append(
+                        f"On {formatted_time}, the conversation was: {mem['content']} \n\nThe assistant responded with: {memory_assistant_msg[0]['content']}"
+                    )
+                
+                # Create a special prompt for memory references
+                memory_context = "\n\n".join(memory_prompts)
+                context = f"""Previous conversation history:
+{memory_context}
+
+When responding, start by acknowledging that you recall the conversation, mentioning when it happened, 
+and briefly summarize what was discussed. Then proceed to answer the current question using that context.
+"""
+                logging.info("Using memory reference format for response")
+            else:
+                # Create a special prompt for when no memories are found
+                context = """I should respond by saying: "Sorry, I do not recall us having that conversation."
+                Do not add any additional explanations or suggestions."""
+                logging.info("No relevant memories found")
+        
+        elif prediction == "New":
+            # Get fresh context for the current message
+            context_response = await llm_service.get_context(user_message)
             context = context_response[0]
             context_documents = context_response[1]
-            if context:
-                logging.info("Context found and will be used for response")
-                logging.debug(f"Context preview: {context[:200]}...")
-            else:
-                logging.info("No relevant context found")
+            logging.info("Using fresh context for new query")
+        
+        if context:
+            logging.info("Context found and will be used for response")
+            logging.debug(f"Context preview: {context[:200]}...")
+        else:
+            logging.info("No relevant context found")
 
         async for text in llm_service.generate_response_stream(
             messages=prompt_messages,
@@ -111,17 +169,24 @@ async def generate_stream(request: ChatRequest, chat_id: int):
             yield f"data: {json.dumps({'text': text})}\n\n"
         
         # Store the assistant's response
-        db_service.add_message(chat_id, "assistant", full_response)
+        resp = db_service.add_message(chat_id, "assistant", full_response)
+        chat_id = resp[1]
+        interaction_id = resp[2]
         
         # After stream ends, trigger summarization
         logger.info("Stream completed, triggering summarization...")
+        # Only store memory if it's not a reference-type query
+
         task = asyncio.create_task(
             memory_manager.add_exchange(
                 user_message,
                 full_response,
                 chat_id,
+                interaction_id,
                 db_service,
-                context_documents  # Pass context documents to memory manager
+                context_documents,
+                prediction,
+                memory_assistant_msg
             )
         )
         task.add_done_callback(
@@ -147,8 +212,11 @@ async def chat_stream(request: ChatRequest, chat_id: int):
     )
     
     # Store the user's message
-    message = db_service.add_message(chat_id, "user", request.messages[-1].content)
-    
+    resp = db_service.add_message(chat_id, "user", request.messages[-1].content)
+    message = resp[0]
+    chat_id = resp[1]
+    interaction_id = resp[2]
+
     # Create a new list of messages with the updated last message
     messages = list(request.messages[:-1])  # Convert to list and exclude last message
     messages.append(ChatMessage(
@@ -240,3 +308,33 @@ async def get_chat(chat_id: int):
         "interactions": interactions,
         "summary": chat.summary  # Overall chat summary
     }
+
+@app.get("/memories/query")
+async def query_memories(
+    query: str,
+    num_results: int = Query(default=3, ge=1, le=10),
+    min_similarity: float = Query(default=0.1, ge=0, le=1.0)
+):
+    """Query the memory collection for relevant memories"""
+    result = await memory_service.query_memories(
+        query=query,
+        num_results=num_results,
+        min_similarity=min_similarity
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="No memories found")
+    return result
+
+@app.get("/memories/chat/{chat_id}")
+async def get_chat_memories(
+    chat_id: int,
+    interaction_id: Optional[int] = None
+):
+    """Get memories for a specific chat"""
+    memories = await memory_service.get_chat_memories(
+        chat_id=chat_id,
+        interaction_id=interaction_id
+    )
+    if not memories:
+        raise HTTPException(status_code=404, detail="No memories found")
+    return memories

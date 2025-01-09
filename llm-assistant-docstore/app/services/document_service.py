@@ -39,6 +39,33 @@ class DocumentService:
             embedding_function=self.embedding_model
         )
 
+    def _chunk_text(self, text: str, chunk_size: int = 500) -> List[str]:
+        """Split text into chunks of approximately chunk_size characters"""
+        # Split into sentences first (rough approximation)
+        sentences = text.replace('\n', ' ').split('.')
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        
+        for sentence in sentences:
+            sentence = sentence.strip() + '.'
+            sentence_length = len(sentence)
+            
+            if current_length + sentence_length > chunk_size and current_chunk:
+                # Join the current chunk and add it to chunks
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [sentence]
+                current_length = sentence_length
+            else:
+                current_chunk.append(sentence)
+                current_length += sentence_length
+        
+        # Add the last chunk if it exists
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+        
+        return chunks
+
     async def add_document(self, filename: str, content: bytes, collection: str = "context") -> str:
         try:
             db = self.context_collection if collection == "context" else self.memory_collection
@@ -64,7 +91,7 @@ class DocumentService:
                         page_content=chunk,
                         metadata={
                             "source": filename,
-                            "full_document": text,
+                            "full_document": text,  # Keep full document in metadata
                             "collection": collection
                         }
                     )

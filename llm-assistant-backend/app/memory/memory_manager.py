@@ -19,14 +19,10 @@ class MemoryManager:
         self.current_summary = None
         self.max_history_length = 5  # Maximum number of turns to keep
         
-    async def add_exchange(self, user_message, assistant_response, chat_id=None, db_service=None, context_documents=None):
+    async def add_exchange(self, user_message, assistant_response, chat_id=None, interaction_id=None, db_service=None, context_documents=None, classification="New", memory_msg=None):
         """Add a new exchange to the conversation history."""
         logger.info(f"Adding new exchange - User: {user_message[:50]}...")
-        
-        # Get the current interaction_id
-        if chat_id and db_service:
-            interaction_id = db_service.get_latest_interaction_id(chat_id) + 1
-        
+
         try:
             # Generate summary for user message
             logger.info("Starting user message summarization...")
@@ -46,7 +42,7 @@ class MemoryManager:
             assistant_summary, assistant_time = assistant_summary_result
             
             # Store interaction summaries if we have database access
-            if chat_id is not None and db_service is not None:
+            if chat_id is not None and db_service is not None and interaction_id is not None:
                 db_service.add_interaction_summary(
                     chat_id, 
                     interaction_id, 
@@ -66,27 +62,40 @@ class MemoryManager:
                     'chat_id': chat_id,
                     'interaction_id': interaction_id
                 }
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(url=self.docstore_url + "/memories", json=memory_data) as response:
-                        if response.status == 200:
-                            data = await response.json()  # convert bytes to dict
 
-                            logging.info(f"Memory added successfully: {data}")
-                        else:
-                            logging.error(f"Error fetching context: {response.status}")
+                if classification != "Reference":
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(url=self.docstore_url + "/memories", json=memory_data) as response:
+                            if response.status == 200:
+                                data = await response.json()  # convert bytes to dict
 
+                                logging.info(f"Memory added successfully: {data}")
+                            else:
+                                logging.error(f"Error fetching context: {response.status}")
+                else:
+                    logger.info("Skipping memory storage for reference-type query")
                 
             # Store context documents if provided
             if context_documents:
+                memory_msg_id = None
+                if memory_msg is not None:
+                    memory_msg_id = memory_msg['message_id']
                 for key in context_documents:
                     doc = context_documents[key]
                     db_service.add_interaction_context(
                         chat_id=chat_id,
                         interaction_id=interaction_id,
                         context_document_id=doc['document_id'],
-                        similarity_score=doc['similarity']
+                        similarity_score=doc['similarity'],
+                        memory_msg_id=memory_msg_id
                     )
-            
+            elif memory_msg is not None:
+                db_service.add_interaction_context(
+                    chat_id=chat_id,
+                    interaction_id=interaction_id,
+                    memory_msg_id=memory_msg[0]['message_id']
+                )
+
             # retrieve chat histroy from db
             chat_history = []
             if chat_id is not None and db_service is not None:

@@ -67,3 +67,14 @@ async def query_memory(request: QueryRequest):
     except Exception as e:
         logging.error(f"Error processing query: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/documents/{document_id}")
+async def get_document(document_id: int):
+    """Get document content by ID"""
+    try:
+        document = await doc_service.get_document_content(document_id)
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return {"content": document}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
