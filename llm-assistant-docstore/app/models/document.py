@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel
 from typing import List, Optional
@@ -8,12 +9,28 @@ class RelevanceLevel(str, Enum):
     LOW = "low"
     NOT_RELEVANT = "not_relevant"
 
+class Memory(BaseModel):
+    user: str
+    assistant: str
+    chat_id: int
+    interaction_id: int
+    timestamp: datetime
+
+
 class DocumentMetadata(BaseModel):
     source: str
     full_document: str
     similarity: float
     relevance: RelevanceLevel
     document_id: Optional[int] = None
+
+class MemoryData(BaseModel):
+    content: str
+    chat_id: int
+    interaction_id: int
+    similarity: float
+    timestamp: str
+    memory_id: Optional[str] = None
 
 class QueryResult(BaseModel):
     text: str
@@ -22,6 +39,10 @@ class QueryResult(BaseModel):
 
 class QueryResponse(BaseModel):
     results: List[QueryResult]
+    has_results: bool = False
+
+class MemoryResponse(BaseModel):
+    results: List[MemoryData]
     has_results: bool = False
 
 class QueryRequest(BaseModel):

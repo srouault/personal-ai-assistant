@@ -1,3 +1,4 @@
+import doctest
 import os
 os.environ["LANGCHAIN_DISABLE_TELEMETRY"] = "true"
 
@@ -8,7 +9,8 @@ import logging
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain.schema import Document
-from app.models.document import QueryResponse, QueryResult, DocumentMetadata, RelevanceLevel
+from app.models.document import QueryResponse, QueryResult, DocumentMetadata, RelevanceLevel, \
+    MemoryData, MemoryResponse
 from ..models.database import Document as DBDocument, SessionLocal
 
 class DocumentService:
@@ -178,6 +180,78 @@ class DocumentService:
             logging.exception("Full traceback:")
             raise
 
+    async def query_memories(
+            self,
+            query: str,
+            collection: str = "memories",
+            num_results: int = 3,
+            min_similarity: Optional[float] = None
+    ) -> QueryResponse:
+        try:
+            logging.info(f"Querying {collection} collection with: '{query}'")
+
+            db = self.context_collection if collection == "context" else self.memory_collection
+            doc_count = db._collection.count()
+            logging.info(f"Total documents in {collection} collection: {doc_count}")
+
+            if doc_count == 0:
+                logging.warning(f"No documents in {collection} collection")
+                return QueryResponse(results=[], has_results=False)
+
+            # Search in ChromaDB
+            logging.info(f"Searching for top {num_results * 2} results in {collection}")
+            results = db.similarity_search_with_relevance_scores(
+                query,
+                k=num_results * 2  # Get more results to filter
+            )
+
+            logging.info(f"Found {len(results)} initial results")
+
+            # Use dict to deduplicate by source while keeping highest similarity
+            source_results = {}
+            for doc, similarity in results:
+                source = str(doc.metadata["interaction_id"]) + str(doc.metadata["chat_id"])
+
+                if source not in source_results or similarity > source_results[source][1]:
+                    source_results[source] = (doc, similarity)
+
+            # Convert back to list and format results
+            formatted_results = []
+            for doc, similarity in source_results.values():
+                memory_id = doc.metadata["memory_id"]
+
+                # Apply filters
+                if min_similarity is not None and similarity < min_similarity:
+                    logging.info(f"Skipping result due to low similarity: {similarity} < {min_similarity}")
+                    continue
+
+                result = MemoryData(
+                        content=doc.page_content,
+                        chat_id=doc.metadata['chat_id'],
+                        interaction_id=doc.metadata['interaction_id'],
+                        similarity=float(similarity),
+                        timestamp=doc.metadata['timestamp'],
+                        memory_id=memory_id  # Add document_id to metadata
+                    )
+                formatted_results.append(result)
+
+            # Sort by similarity
+            formatted_results.sort(key=lambda x: x.similarity, reverse=True)
+
+            # Limit to requested number
+            formatted_results = formatted_results[:num_results]
+            logging.info(f"Returning {len(formatted_results)} final results")
+
+            return MemoryResponse(
+                results=formatted_results,
+                has_results=len(formatted_results) > 0
+            )
+
+        except Exception as e:
+            logging.error(f"Error querying documents: {str(e)}")
+            logging.exception("Full traceback:")
+            raise
+
     async def get_context_for_prompt(
         self, 
         prompt: str, 
@@ -227,6 +301,7 @@ class DocumentService:
                     "source": f"memory_{doc_id}",
                     "full_document": content,
                     "collection": "memory",
+                    "memory_id" : doc_id,
                     **(metadata or {})
                 }
             )
@@ -249,7 +324,7 @@ class DocumentService:
         min_similarity: float = 0.1
     ) -> QueryResponse:
         """Specifically query the memory collection"""
-        return await self.query_documents(
+        return await self.query_memories(
             query=query,
             collection="memory",
             num_results=num_results,

@@ -1,13 +1,19 @@
+from datetime import datetime
+
+from aiohttp.abc import HTTPException
+
 from .summarizer import ConversationSummarizer
 import asyncio
+import aiohttp
 import logging
 
 
 logger = logging.getLogger(__name__)
 
 class MemoryManager:
-    def __init__(self, llm_service):
+    def __init__(self, llm_service, docstore_url: str = "http://localhost:8001", ):
         logger.info("Initializing MemoryManager")
+        self.docstore_url = docstore_url
         self.summarizer = ConversationSummarizer(llm_service)
         self.conversation_history = []
         self.current_summary = None
@@ -47,6 +53,28 @@ class MemoryManager:
                     user_summary,
                     assistant_summary
                 )
+                # Create a DateTime object with current time (or any other specific date)
+                current_time = datetime.now()
+
+                # Format it to ISO 8601 format, which is commonly used for timestamps
+                iso_formatted_timestamp = current_time.isoformat()
+
+                memory_data = {
+                    'user': user_summary,
+                    'assistant': assistant_summary,
+                    'timestamp': iso_formatted_timestamp,
+                    'chat_id': chat_id,
+                    'interaction_id': interaction_id
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url=self.docstore_url + "/memories", json=memory_data) as response:
+                        if response.status == 200:
+                            data = await response.json()  # convert bytes to dict
+
+                            logging.info(f"Memory added successfully: {data}")
+                        else:
+                            logging.error(f"Error fetching context: {response.status}")
+
                 
             # Store context documents if provided
             if context_documents:
