@@ -20,7 +20,7 @@ app.add_middleware(
 async def upload_document(file: UploadFile):
     try:
         content = await file.read()
-        doc_id = await doc_service.add_document(file.filename, content)
+        doc_id = await doc_service.async_add_document(file.filename, content)
         return {"message": "Document added successfully", "doc_id": doc_id}
     except Exception as e:
         logging.error(f"Error uploading document: {str(e)}")

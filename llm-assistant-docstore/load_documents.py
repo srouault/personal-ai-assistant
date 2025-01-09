@@ -1,4 +1,6 @@
 import os
+
+
 os.environ["LANGCHAIN_DISABLE_TELEMETRY"] = "true"
 
 from app.services.document_service import DocumentService
@@ -23,11 +25,11 @@ def load_documents(documents_dir="documents"):
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     text = f.read()
-                    
+
                 # Use document service to add the document
                 document_service.add_document(
                     filename=source_name,
-                    content=text,
+                    content=text.encode('utf-8'),
                     collection="context"
                 )
                 

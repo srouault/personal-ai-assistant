@@ -10,7 +10,7 @@ os.makedirs(data_dir, exist_ok=True)
 
 Base = declarative_base()
 
-class Document(Base):
+class ContextDocument(Base):
     __tablename__ = "documents"
     
     id = Column(Integer, primary_key=True)

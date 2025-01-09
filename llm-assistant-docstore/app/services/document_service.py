@@ -11,7 +11,8 @@ from langchain_community.vectorstores import Chroma
 from langchain.schema import Document
 from app.models.document import QueryResponse, QueryResult, DocumentMetadata, RelevanceLevel, \
     MemoryData, MemoryResponse
-from ..models.database import Document as DBDocument, SessionLocal
+from ..models.database import SessionLocal, ContextDocument
+
 
 class DocumentService:
     def __init__(self):
@@ -66,7 +67,14 @@ class DocumentService:
         
         return chunks
 
-    async def add_document(self, filename: str, content: bytes, collection: str = "context") -> str:
+    async def async_add_document(self, filename: str, content: bytes, collection: str = "context"):
+        try:
+            await self.add_document(filename, content, collection)
+        except Exception as e:
+            logging.error(f"Error adding document: {str(e)}")
+            raise
+
+    def add_document(self, filename: str, content: bytes, collection: str = "context"):
         try:
             db = self.context_collection if collection == "context" else self.memory_collection
             
@@ -79,7 +87,8 @@ class DocumentService:
                 return existing_docs['ids'][0]
 
             text = content.decode('utf-8')
-            doc_id = str(uuid.uuid4())
+
+            doc_id = self.add_document_to_db(filename, content)
             # Split text into chunks
             chunks = []
             current_chunk = []
@@ -124,6 +133,7 @@ class DocumentService:
                         metadata={
                             "source": filename,
                             "full_document": text,  # Keep full document in metadata
+                            "document_id": doc_id,
                             "collection": collection,
                             "chunk_id": i,  # Add chunk identifier
                             "total_chunks": len(chunks)
@@ -394,8 +404,21 @@ class DocumentService:
 
     async def get_document_content(self, document_id: int) -> str:
         """Retrieve full document content from SQLite"""
-        doc = self.db.query(DBDocument).filter_by(id=document_id).first()
+        doc = self.db.query(ContextDocument).filter_by(id=document_id).first()
         return doc.content if doc else None
+
+    def add_document_to_db(self, filename: str, content: bytes):
+        # Create document in SQLite
+        doc = ContextDocument(
+            filename=filename,
+            content=content,
+            collection="context"
+        )
+        self.db.add(doc)
+        self.db.commit()
+        self.db.refresh(doc)  # This ensures we get the ID back
+
+        return doc.id
 
     def __del__(self):
         """Close DB connection when service is destroyed"""
