@@ -80,19 +80,53 @@ class DocumentService:
 
             text = content.decode('utf-8')
             doc_id = str(uuid.uuid4())
-            chunks = self._chunk_text(text)
+            # Split text into chunks
+            chunks = []
+            current_chunk = []
+            current_length = 0
+            
+            # First split by paragraphs
+            paragraphs = text.split('\n\n')
+            
+            for paragraph in paragraphs:
+                # Further split long paragraphs into sentences
+                sentences = paragraph.replace('\n', ' ').split('.')
+                
+                for sentence in sentences:
+                    sentence = sentence.strip() + '.'
+                    sentence_length = len(sentence)
+                    
+                    if current_length + sentence_length > 500:  # Max chunk size
+                        if current_chunk:
+                            chunks.append(' '.join(current_chunk))
+                        current_chunk = [sentence]
+                        current_length = sentence_length
+                    else:
+                        current_chunk.append(sentence)
+                        current_length += sentence_length
+                
+                # Add paragraph break if we're continuing the same chunk
+                if current_chunk:
+                    current_chunk.append('\n\n')
+                    current_length += 2
+            
+            # Add the last chunk if it exists
+            if current_chunk:
+                chunks.append(' '.join(current_chunk).strip())
             
             logging.info(f"Processing document {filename} with {len(chunks)} chunks for {collection}")
             
             documents = []
-            for chunk in chunks:
+            for i, chunk in enumerate(chunks):
                 documents.append(
                     Document(
                         page_content=chunk,
                         metadata={
                             "source": filename,
                             "full_document": text,  # Keep full document in metadata
-                            "collection": collection
+                            "collection": collection,
+                            "chunk_id": i,  # Add chunk identifier
+                            "total_chunks": len(chunks)
                         }
                     )
                 )
