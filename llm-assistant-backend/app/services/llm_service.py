@@ -2,10 +2,11 @@ from llama_cpp import Llama
 from app.models.chat import ChatMessage
 import os
 from pathlib import Path
-from typing import Generator, Optional, AsyncGenerator
+from typing import Generator, Optional, AsyncGenerator, List, Dict
 import logging
 import aiohttp
 import joblib
+import json
 
 class LLMService:
     def __init__(self, docstore_url: str = "http://localhost:8001", db_service=None):
@@ -214,3 +215,56 @@ Summary:"""
             logging.error(f"Error generating summary: {str(e)}")
             logging.exception("Full traceback:")
             return f"Error generating summary: {str(e)}"
+
+    async def generate_coaching_response(self, 
+                                      user_input: str, 
+                                      learning_path: dict, 
+                                      current_tutorial: dict,
+                                      user_progress: dict,
+                                      context_docs: List[str] = None) -> str:
+        # Construct a prompt that includes the learning context
+        system_prompt = f"""You are an AI coach helping a user through the learning path: {learning_path['title']}.
+Current tutorial: {current_tutorial['title']}
+Progress: {user_progress['completed_tutorials']}/{user_progress['total_tutorials']} tutorials completed.
+
+Your role is to:
+1. Guide the user through the current tutorial
+2. Answer questions about the material
+3. Provide encouragement and support
+4. Reference relevant documentation when helpful
+5. Suggest next steps based on progress
+
+Tutorial content: {current_tutorial['content']}
+"""
+
+        if context_docs:
+            system_prompt += f"\nRelevant documentation: {' '.join(context_docs)}"
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_input}
+        ]
+
+        response = await self.get_completion(messages)
+        return response
+
+    async def generate_starter_questions(self, learning_path: dict) -> List[str]:
+        prompt = f"""Given this learning path: {learning_path['title']}
+Description: {learning_path['description']}
+Category: {learning_path['category']}
+
+Generate 5 relevant starter questions that a user might want to ask to begin their learning journey.
+Return the questions as a JSON array."""
+
+        messages = [
+            {"role": "system", "content": "You are an AI coach helping users start their learning journey."},
+            {"role": "user", "content": prompt}
+        ]
+
+        response = await self.get_completion(messages)
+        try:
+            questions = json.loads(response)
+            return questions
+        except:
+            # Fallback in case response isn't valid JSON
+            return response.split('\n')

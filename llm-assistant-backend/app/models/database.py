@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, create_engine, Float
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, create_engine, Float, JSON, Boolean
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, sessionmaker
 from datetime import datetime
+import os
 
 Base = declarative_base()
 
@@ -58,3 +59,53 @@ class InteractionContext(Base):
     
     # Relationship with chat
     chat = relationship("Chat", back_populates="interaction_contexts")
+
+class LearningPath(Base):
+    __tablename__ = "learning_paths"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, unique=True, index=True)
+    description = Column(String)
+    category = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    path_metadata = Column(JSON)
+
+class Tutorial(Base):
+    __tablename__ = "tutorials"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    learning_path_id = Column(Integer, ForeignKey("learning_paths.id"))
+    title = Column(String)
+    description = Column(String)
+    order = Column(Integer)
+    content = Column(String)
+    estimated_duration = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    learning_path = relationship("LearningPath", back_populates="tutorials")
+
+class UserProgress(Base):
+    __tablename__ = "user_progress"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, index=True)
+    tutorial_id = Column(Integer, ForeignKey("tutorials.id"))
+    completed = Column(Boolean, default=False)
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime)
+    notes = Column(String)
+    
+    tutorial = relationship("Tutorial")
+
+# Add relationship to LearningPath
+LearningPath.tutorials = relationship("Tutorial", order_by=Tutorial.order, back_populates="learning_path")
+
+# Database configuration
+DATABASE_URL = "sqlite:///./data/assistant.db"
+os.makedirs("data", exist_ok=True)
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Create all tables
+Base.metadata.create_all(bind=engine)

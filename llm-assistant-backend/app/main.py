@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from app.models.chat import ChatRequest, ChatResponse, ChatMessage
@@ -12,6 +12,9 @@ import asyncio
 from .services.db_service import DatabaseService
 from typing import List, Optional
 from datetime import datetime
+from sqlalchemy.orm import Session
+from app.services.learning_path_service import LearningPathService
+from app.models.database import SessionLocal
 
 # Configure logging at the top of main.py
 logging.basicConfig(
@@ -47,11 +50,29 @@ db_service = DatabaseService()
 llm_service = LLMService(db_service=db_service)
 memory_service = MemoryService()
 
+router = APIRouter()
+
 class PromptRequest(BaseModel):
     prompt: str
 
 class PromptResponse(BaseModel):
     response: str
+
+# Add database dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Add learning path service dependency
+def get_learning_path_service(db: Session = Depends(get_db)):
+    return LearningPathService(db)
+
+# Add this with the other dependency functions
+def get_llm_service():
+    return llm_service
 
 @app.get("/")
 async def root():
@@ -350,3 +371,49 @@ async def get_chat_memories(
     if not memories:
         raise HTTPException(status_code=404, detail="No memories found")
     return memories
+
+@app.get("/learning-paths")
+async def get_learning_paths(
+    learning_path_service: LearningPathService = Depends(get_learning_path_service)
+):
+    return learning_path_service.get_learning_paths()
+
+@app.get("/learning-paths/{path_id}")
+async def get_learning_path(
+    path_id: int,
+    learning_path_service: LearningPathService = Depends(get_learning_path_service)
+):
+    path = learning_path_service.get_learning_path(path_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+    return path
+
+@app.get("/learning-paths/{path_id}/tutorials")
+async def get_tutorials(
+    path_id: int,
+    learning_path_service: LearningPathService = Depends(get_learning_path_service)
+):
+    return learning_path_service.get_tutorials_for_path(path_id)
+
+@app.post("/progress/{user_id}/tutorial/{tutorial_id}")
+async def update_progress(
+    user_id: str,
+    tutorial_id: int,
+    completed: bool = False,
+    notes: str = None,
+    learning_path_service: LearningPathService = Depends(get_learning_path_service)
+):
+    return learning_path_service.track_progress(user_id, tutorial_id, completed, notes)
+
+@app.get("/learning-paths/{path_id}/starter-questions")
+async def get_starter_questions(
+    path_id: int,
+    learning_path_service: LearningPathService = Depends(get_learning_path_service),
+    llm_service: LLMService = Depends(get_llm_service)
+):
+    path = learning_path_service.get_learning_path(path_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="Learning path not found")
+    
+    questions = await llm_service.generate_starter_questions(path.__dict__)
+    return {"questions": questions}
