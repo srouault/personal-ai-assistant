@@ -603,6 +603,7 @@ export class LearningPanel extends LitElement {
   }
 
   startTutorial() {
+    console.log('Starting tutorial:', this.selectedContext.title);
     const tutorialEvent = new CustomEvent('start-tutorial', {
       detail: {
         title: this.selectedContext.title,
@@ -612,6 +613,7 @@ export class LearningPanel extends LitElement {
       bubbles: true,
       composed: true
     });
+    console.log('Dispatching tutorial event:', tutorialEvent);
     this.dispatchEvent(tutorialEvent);
     this.closeDocument();
     this.togglePanel();

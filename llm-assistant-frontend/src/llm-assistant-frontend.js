@@ -43,6 +43,7 @@ class LlmAssistantFrontend extends LitElement {
     this.currentTutorial = null;
     console.log('LlmAssistantFrontend initialized');
     this.initializeChat();
+    this.handleTutorialStart = this.handleTutorialStart.bind(this);
     this.addEventListener('start-tutorial', this.handleTutorialStart);
   }
 
@@ -309,17 +310,39 @@ class LlmAssistantFrontend extends LitElement {
     this.sendMessage();
   }
 
-  handleTutorialStart(event) {
+  async handleTutorialStart(event) {
+    console.log('Tutorial start event received:', event.detail);
     this.currentTutorial = event.detail;
-    // Create an initial message to start the tutorial
-    const initialMessage = `I'd like to start the tutorial "${event.detail.title}". Please guide me through it.`;
     
-    // Add the message to the chat
-    if (this.chatPanel) {
-      this.chatPanel.addMessage({
-        role: 'user',
-        content: initialMessage
-      });
+    // Start a new chat first
+    try {
+      const response = await fetch('http://localhost:8080/chat/latest/id');
+      const data = await response.json();
+      this.selectedChatId = (data.id || 0) + 1;
+      console.log('Created new chat with ID:', this.selectedChatId);
+      
+      // Clear existing messages
+      this.messages = [];
+      
+      // Set up the tutorial message
+      const initialMessage = `I'd like to start the tutorial "${event.detail.title}". Please guide me through it.`;
+      console.log('Setting initial message:', initialMessage);
+      
+      if (this.shadowRoot.querySelector('chat-window')) {
+        this.inputText = initialMessage;
+        console.log('Sending tutorial message...');
+        this.sendMessage();
+        
+        // Refresh chat list
+        const chatHistoryElement = this.shadowRoot.querySelector('chat-history');
+        if (chatHistoryElement) {
+          chatHistoryElement.loadChats();
+        }
+      } else {
+        console.error('Chat window not found');
+      }
+    } catch (error) {
+      console.error('Error creating new chat for tutorial:', error);
     }
   }
 
