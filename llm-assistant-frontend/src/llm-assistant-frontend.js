@@ -217,11 +217,14 @@ class LlmAssistantFrontend extends LitElement {
 
         // Wait for messages to render then scroll to the interaction
         await this.updateComplete;
+        
+        // Add a small delay to ensure everything is rendered
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         const chatWindow = this.shadowRoot.querySelector('chat-window');
         console.log('Found chat window:', chatWindow);
         
         if (chatWindow) {
-          // Find the messages-scroll container first
           const scrollContainer = chatWindow.shadowRoot.querySelector('.messages-scroll');
           console.log('Found scroll container:', scrollContainer);
           
@@ -232,18 +235,46 @@ class LlmAssistantFrontend extends LitElement {
             console.log('Found message element:', messageElement);
             
             if (messageElement) {
-              // Scroll the messages-scroll container
+              // Simple scroll calculation with smaller offset to show more context
+              const scrollOffset = 150; // Increased from 100 to show more above the message
+              const targetPosition = Math.max(0, messageElement.offsetTop - scrollOffset);
+              
+              // Get container height to ensure we don't scroll past bottom
+              const containerHeight = scrollContainer.clientHeight;
+              const maxScroll = scrollContainer.scrollHeight - containerHeight;
+              const finalPosition = Math.min(targetPosition, maxScroll);
+              
               scrollContainer.scrollTo({
-                top: messageElement.offsetTop - scrollContainer.offsetHeight / 2,
+                top: finalPosition,
                 behavior: 'smooth'
               });
-              console.log('Scrolled to message');
+              console.log('Scrolled to position:', {
+                targetPosition,
+                finalPosition,
+                offset: scrollOffset,
+                containerHeight
+              });
               
-              // Add highlight effect
-              messageElement.style.backgroundColor = '#fef3c7';
+              // Add enhanced highlight effect
+              messageElement.style.transition = 'background-color 0.5s ease-in-out';
+              messageElement.style.backgroundColor = '#fef3c7'; // Warm yellow
+              
+              // Add a subtle border and shadow during highlight
+              messageElement.style.boxShadow = '0 0 15px rgba(251, 191, 36, 0.4)';
+              messageElement.style.borderRadius = '8px';
+              
               setTimeout(() => {
                 messageElement.style.backgroundColor = '';
-                console.log('Removed highlight effect');
+                // Fade out the effects
+                messageElement.style.boxShadow = '0 0 0 rgba(251, 191, 36, 0)';
+                
+                // Remove the transition after animation completes
+                setTimeout(() => {
+                  messageElement.style.transition = '';
+                  messageElement.style.boxShadow = '';
+                  messageElement.style.borderRadius = '';
+                  console.log('Removed highlight effect');
+                }, 500);
               }, 2000);
             } else {
               console.log('Message element not found for interaction:', interactionId);
