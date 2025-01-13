@@ -7,7 +7,10 @@ export class LearningPanel extends LitElement {
     query: { type: String },
     isVisible: { type: Boolean },
     contexts: { type: Array },
-    selectedContext: { type: Object }
+    selectedContext: { type: Object },
+    learningPaths: { type: Array },
+    selectedPath: { type: Object },
+    tutorials: { type: Array }
   };
 
   constructor() {
@@ -16,6 +19,9 @@ export class LearningPanel extends LitElement {
     this.isVisible = false;
     this.contexts = [];
     this.selectedContext = null;
+    this.learningPaths = [];
+    this.selectedPath = null;
+    this.tutorials = [];
   }
 
   static styles = css`
@@ -96,7 +102,7 @@ export class LearningPanel extends LitElement {
       writing-mode: vertical-rl;
       text-orientation: mixed;
       transform: rotate(0deg);
-      background-color: rgb(59, 130, 246);
+      background-color: rgb(147, 51, 234);
       color: white;
       border: none;
       cursor: pointer;
@@ -110,13 +116,13 @@ export class LearningPanel extends LitElement {
     }
 
     .toggle-button:hover {
-      background-color: rgb(37, 99, 235);
+      background-color: rgb(126, 34, 206);
     }
 
     .toggle-button:focus {
       outline: none;
       ring: 2px;
-      ring-color: rgb(59, 130, 246);
+      ring-color: rgb(147, 51, 234);
     }
 
     .title-text {
@@ -356,6 +362,123 @@ export class LearningPanel extends LitElement {
     .markdown-content th {
       background: #1a1a1a;
     }
+
+    .learning-paths-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .learning-path-item {
+      padding: 1rem;
+      background: #333;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .learning-path-item:hover {
+      background: #444;
+    }
+
+    .path-title {
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .path-description {
+      color: #ccc;
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .path-metadata {
+      display: flex;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    .category {
+      background: #2563eb;
+      color: white;
+      padding: 0.2rem 0.5rem;
+      border-radius: 9999px;
+    }
+
+    .back-button {
+      background: none;
+      border: none;
+      color: #60a5fa;
+      cursor: pointer;
+      padding: 0.5rem 0;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+
+    .back-button:hover {
+      color: #93c5fd;
+    }
+
+    .tutorials-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .tutorial-item {
+      padding: 1rem;
+      background: #333;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .tutorial-item:hover {
+      background: #444;
+    }
+
+    .tutorial-title {
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .tutorial-description {
+      color: #ccc;
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .tutorial-metadata {
+      color: #9ca3af;
+      font-size: 0.8rem;
+    }
+
+    .content-text {
+      margin-top: 1rem;
+      line-height: 1.6;
+    }
+
+    .metadata-container {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid #444;
+    }
+
+    .metadata-item {
+      display: flex;
+      gap: 0.5rem;
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+
+    .metadata-label {
+      font-weight: 500;
+    }
   `;
 
   togglePanel() {
@@ -414,6 +537,47 @@ export class LearningPanel extends LitElement {
     this.selectedContext = null;
   }
 
+  async fetchLearningPaths() {
+    try {
+      const response = await fetch('http://localhost:8001/learning-paths');
+      const data = await response.json();
+      this.learningPaths = data;
+    } catch (error) {
+      console.error('Error fetching learning paths:', error);
+    }
+  }
+
+  async fetchTutorials(pathId) {
+    try {
+      const response = await fetch(`http://localhost:8001/learning-paths/${pathId}/tutorials`);
+      const data = await response.json();
+      this.tutorials = data;
+    } catch (error) {
+      console.error('Error fetching tutorials:', error);
+    }
+  }
+
+  async selectPath(path) {
+    this.selectedPath = path;
+    await this.fetchTutorials(path.id);
+  }
+
+  async selectTutorial(tutorial) {
+    this.selectedContext = {
+      title: tutorial.title,
+      content: tutorial.content,
+      metadata: {
+        duration: tutorial.estimated_duration,
+        created_at: tutorial.created_at
+      }
+    };
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.fetchLearningPaths();
+  }
+
   render() {
     return html`
       <div class="backdrop ${this.isVisible ? 'visible' : ''}" 
@@ -424,7 +588,18 @@ export class LearningPanel extends LitElement {
              @click=${(e) => e.target === e.currentTarget && this.closeDocument()}>
           <div class="document-content">
             <button class="close-button" @click=${this.closeDocument}>&times;</button>
-            <!-- TODO: add items here -->
+            ${this.selectedContext ? html`
+              <h2>${this.selectedContext.title}</h2>
+              <div class="content-text markdown-content">
+                ${unsafeHTML(marked.parse(this.selectedContext.content))}
+              </div>
+              <div class="metadata-container">
+                <div class="metadata-item">
+                  <span class="metadata-label">Duration:</span>
+                  <span class="metadata-value">${this.selectedContext.metadata.duration} min</span>
+                </div>
+              </div>
+            ` : ''}
           </div>
         </div>
 
@@ -444,7 +619,48 @@ export class LearningPanel extends LitElement {
           </div>
 
           <div class="panel-content">
-            <!-- TODO: Add content here -->
+            ${this.selectedPath ? 
+              html`
+                <div class="selected-path">
+                  <button 
+                    @click=${() => this.selectedPath = null}
+                    class="back-button"
+                  >
+                    ← Back to Learning Paths
+                  </button>
+                  <h4 class="path-title">${this.selectedPath.title}</h4>
+                  <p class="path-description">${this.selectedPath.description}</p>
+                  
+                  <div class="tutorials-list">
+                    ${this.tutorials.map(tutorial => html`
+                      <div class="tutorial-item" @click=${() => this.selectTutorial(tutorial)}>
+                        <h5 class="tutorial-title">${tutorial.title}</h5>
+                        <p class="tutorial-description">${tutorial.description}</p>
+                        <div class="tutorial-metadata">
+                          <span class="duration">Duration: ${tutorial.estimated_duration} min</span>
+                        </div>
+                      </div>
+                    `)}
+                  </div>
+                </div>
+              ` : 
+              html`
+                <div class="learning-paths-list">
+                  ${this.learningPaths.map(path => html`
+                    <div 
+                      class="learning-path-item"
+                      @click=${() => this.selectPath(path)}
+                    >
+                      <h4 class="path-title">${path.title}</h4>
+                      <p class="path-description">${path.description}</p>
+                      <div class="path-metadata">
+                        <span class="category">${path.category}</span>
+                      </div>
+                    </div>
+                  `)}
+                </div>
+              `
+            }
           </div>
         </div>
       </div>
