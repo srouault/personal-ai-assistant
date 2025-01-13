@@ -172,7 +172,8 @@ and briefly summarize what was discussed. Then proceed to answer the current que
             messages=prompt_messages,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
-            context=context
+            context=context,
+            prediction_type=prediction
         ):
             full_response += text
             yield f"data: {json.dumps({'text': text})}\n\n"

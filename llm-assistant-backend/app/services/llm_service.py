@@ -14,14 +14,8 @@ class LLMService:
         model_path = os.getenv("MODEL_PATH")
         self.classifier_model = joblib.load("app/models/prompt_classifier.joblib")
 
-        # Define system prompts
-        self.system_prompt = """You are a helpful AI assistant with access to previous conversation history. 
-When given context about previous conversations:
-1. First acknowledge the previous conversation, mentioning when it happened
-2. Briefly summarize what was discussed
-3. Then use that context to answer the current question
-4. End your response with: 'If you want to go back to our chat click here: <<<chat_history>>>CHAT_ID,INTERACTION_ID<<<chat_history>>>'
-   (Replace CHAT_ID and INTERACTION_ID with the actual values from the memory)
+        # Define base system prompt
+        self.base_system_prompt = """You are a helpful AI assistant with access to previous conversation history. 
 
 When given factual context:
 1. Only use information explicitly stated in the provided context
@@ -29,6 +23,15 @@ When given factual context:
 3. Never make assumptions or infer details on questions or topics that are not factual
 4. Quote relevant parts of the context when appropriate
 5. Be concise and direct"""
+
+        # Define reference-specific system prompt
+        self.reference_system_prompt = """You are a helpful AI assistant with access to previous conversation history. 
+When given context about previous conversations:
+1. First acknowledge the previous conversation, mentioning when it happened
+2. Briefly summarize what was discussed
+3. Then use that context to answer the current question
+4. End your response with: 'If you want to go back to our chat click here: <<<chat_history>>>CHAT_ID,INTERACTION_ID<<<chat_history>>>'
+   (Replace CHAT_ID and INTERACTION_ID with the actual values from the memory)"""
 
         if not Path(model_path).exists():
             raise FileNotFoundError(
@@ -50,12 +53,13 @@ When given factual context:
             logging.error(f"Error loading model: {str(e)}")
             raise
     
-    async def generate_response_stream(self, messages: list[ChatMessage], temperature: float = 0.15, max_tokens: int = 150, context: str = None) -> AsyncGenerator[str, None]:
+    async def generate_response_stream(self, messages: list[ChatMessage], temperature: float = 0.15, max_tokens: int = 150, context: str = None, prediction_type: str = "New") -> AsyncGenerator[str, None]:
         try:
-
-
+            # Select appropriate system prompt based on prediction type
+            system_prompt = self.reference_system_prompt if prediction_type == "Reference" else self.base_system_prompt
+            
             # Build the prompt with system message and context
-            formatted_messages = [f"System: {self.system_prompt}"]
+            formatted_messages = [f"System: {system_prompt}"]
             
             if context:
                 formatted_messages.append(f"\nRelevant Context:\n{context}\n")
