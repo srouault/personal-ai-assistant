@@ -303,19 +303,21 @@ async def get_chat(chat_id: int):
                 'interaction_id': msg.interaction_id,
                 'messages': [],
                 'user_summary': summaries.get('user_summary'),
-                'assistant_summary': summaries.get('assistant_summary')
+                'assistant_summary': summaries.get('assistant_summary'),
+                'created_at': msg.created_at.isoformat() if msg.created_at else None  # Add timestamp
             }
             interactions.append(current_interaction)
         current_interaction['messages'].append({
             'role': msg.role,
-            'content': msg.content
+            'content': msg.content,
+            'created_at': msg.created_at.isoformat() if msg.created_at else None  # Add timestamp for each message
         })
     
     return {
         "id": chat.id,
         "title": chat.title,
         "interactions": interactions,
-        "summary": chat.summary  # Overall chat summary
+        "summary": chat.summary
     }
 
 @app.get("/memories/query")

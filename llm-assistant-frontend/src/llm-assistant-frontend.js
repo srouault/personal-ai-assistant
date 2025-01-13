@@ -64,16 +64,20 @@ class LlmAssistantFrontend extends LitElement {
       const response = await fetch(`http://localhost:8080/chats/${chatId}`);
       if (response.ok) {
         const chat = await response.json();
+        console.log('Chat data:', chat);
         this.messages = chat.interactions.flatMap(interaction => [
           {
             ...interaction.messages.find(m => m.role === 'user'),
-            interaction_id: interaction.interaction_id
+            interaction_id: interaction.interaction_id,
+            timestamp: interaction.created_at
           },
           {
             ...interaction.messages.find(m => m.role === 'assistant'),
-            interaction_id: interaction.interaction_id
+            interaction_id: interaction.interaction_id,
+            timestamp: interaction.created_at
           }
         ].filter(Boolean));
+        console.log('Processed messages:', this.messages);
       }
     } catch (error) {
       console.error('Error loading chat:', error);
@@ -206,11 +210,13 @@ class LlmAssistantFrontend extends LitElement {
         this.messages = chat.interactions.flatMap(interaction => [
           {
             ...interaction.messages.find(m => m.role === 'user'),
-            interaction_id: interaction.interaction_id
+            interaction_id: interaction.interaction_id,
+            timestamp: interaction.created_at
           },
           {
             ...interaction.messages.find(m => m.role === 'assistant'),
-            interaction_id: interaction.interaction_id
+            interaction_id: interaction.interaction_id,
+            timestamp: interaction.created_at
           }
         ].filter(Boolean));
         console.log('Updated messages:', this.messages);

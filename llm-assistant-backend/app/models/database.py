@@ -22,11 +22,11 @@ class Chat(Base):
 class Message(Base):
     __tablename__ = "messages"
     
-    id = Column(Integer, primary_key=True)
-    chat_id = Column(Integer, ForeignKey('chats.id'), nullable=False)
-    interaction_id = Column(Integer, nullable=False)  # To pair user questions with assistant answers
-    role = Column(String(50), nullable=False)  # 'user' or 'assistant'
-    content = Column(Text, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    chat_id = Column(Integer, ForeignKey("chats.id", ondelete="CASCADE"))
+    interaction_id = Column(Integer)
+    role = Column(String)
+    content = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationship with chat

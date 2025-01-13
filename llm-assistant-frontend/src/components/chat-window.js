@@ -226,6 +226,53 @@ export class ChatWindow extends LitElement {
       .message-bubble button {
         margin-top: 8px;
       }
+
+      .message-timestamp {
+        font-size: 0.75rem;
+        color: #6b7280;
+        margin: 2px 8px;
+        opacity: 0.8;
+      }
+
+      .user .message-timestamp {
+        text-align: right;
+      }
+
+      .assistant .message-timestamp {
+        text-align: left;
+      }
+
+      .message-container {
+        display: flex;
+        flex-direction: column;
+        margin: 5px;
+        padding: 0;
+      }
+
+      .user .message-container {
+        align-items: flex-end;
+      }
+
+      .assistant .message-container {
+        align-items: flex-start;
+      }
+
+      .messages-scroll {
+        flex: 1;
+        min-height: 0;
+        padding: 1rem;
+        overflow-y: auto;
+        scroll-behavior: smooth;
+      }
+
+      .messages-scroll > div.flex {
+        margin: 0;
+        padding: 0;
+      }
+
+      .messages-scroll > div.flex + div.flex {
+        margin-top: 0.5rem;
+      }
     `
   ];
 
@@ -415,6 +462,37 @@ export class ChatWindow extends LitElement {
     }
   };
 
+  formatTimestamp(timestamp) {
+    if (!timestamp) return '';
+    
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInHours = (now - date) / (1000 * 60 * 60);
+    
+    if (diffInHours < 24) {
+      // Today - show time only
+      return date.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit'
+      });
+    } else if (diffInHours < 48) {
+      // Yesterday
+      return `Yesterday at ${date.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit'
+      })}`;
+    } else {
+      // Older - show date and time
+      return date.toLocaleDateString([], { 
+        month: 'short', 
+        day: 'numeric' 
+      }) + ' at ' + date.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit'
+      });
+    }
+  }
+
   render() {
     return html`
       <div class="chat-container">
@@ -427,22 +505,29 @@ export class ChatWindow extends LitElement {
         </div>
 
         <div class="messages-container bg-gray-100">
-          <div class="messages-scroll space-y-4" @click=${this._handleClick}>
+          <div class="messages-scroll" @click=${this._handleClick}>
             ${this.messages.map((message, index) => html`
               <div class="flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}"
                    data-interaction-id="${message.interaction_id}">
-                <div class="${message.role === 'user' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-white text-gray-800'} 
-                  message-bubble shadow-sm markdown-body">
-                  ${this.formatContent(message)}
-                  ${message.role === 'assistant' && 
-                    index === this.messages.length - 1 && 
-                    this.waitingForFirstToken ? html`
-                    <div class="typing-indicator">
-                      <div class="dot"></div>
-                      <div class="dot"></div>
-                      <div class="dot"></div>
+                <div class="message-container">
+                  <div class="${message.role === 'user' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'bg-white text-gray-800'} 
+                    message-bubble shadow-sm markdown-body">
+                    ${this.formatContent(message)}
+                    ${message.role === 'assistant' && 
+                      index === this.messages.length - 1 && 
+                      this.waitingForFirstToken ? html`
+                      <div class="typing-indicator">
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                      </div>
+                    ` : ''}
+                  </div>
+                  ${message.timestamp ? html`
+                    <div class="message-timestamp">
+                      ${this.formatTimestamp(message.timestamp)}
                     </div>
                   ` : ''}
                 </div>
