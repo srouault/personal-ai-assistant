@@ -96,7 +96,7 @@ export class LearningPanel extends LitElement {
       writing-mode: vertical-rl;
       text-orientation: mixed;
       transform: rotate(0deg);
-      background-color: #7c3aed;
+      background-color: rgb(59, 130, 246);
       color: white;
       border: none;
       cursor: pointer;
@@ -110,7 +110,7 @@ export class LearningPanel extends LitElement {
     }
 
     .toggle-button:hover {
-      background-color: #6d28d9;
+      background-color: rgb(37, 99, 235);
     }
 
     .toggle-button:focus {
@@ -244,6 +244,11 @@ export class LearningPanel extends LitElement {
       border-bottom: 1px solid #e5e7eb;
     }
 
+    .document-content .content-text {
+      color: #fff;
+      line-height: 1.625;
+      font-size: 0.875rem;
+    }
 
     .close-button {
       position: absolute;
@@ -419,7 +424,7 @@ export class LearningPanel extends LitElement {
              @click=${(e) => e.target === e.currentTarget && this.closeDocument()}>
           <div class="document-content">
             <button class="close-button" @click=${this.closeDocument}>&times;</button>
-            <!-- TODO: Add learning path content here -->
+            <!-- TODO: add items here -->
           </div>
         </div>
 
@@ -439,7 +444,7 @@ export class LearningPanel extends LitElement {
           </div>
 
           <div class="panel-content">
-            <!-- TODO: Add learning path items here -->
+            <!-- TODO: Add content here -->
           </div>
         </div>
       </div>

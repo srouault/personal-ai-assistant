@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.document_service import DocumentService
 from app.models.document import QueryRequest, QueryResponse, Memory, MemoryResponse
+from app.models.database import SessionLocal, LearningPath, Tutorial
 import logging
 
 app = FastAPI()
@@ -15,6 +16,78 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Database dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.get("/learning-paths")
+def get_learning_paths():
+    """Get all learning paths"""
+    db = SessionLocal()
+    try:
+        paths = db.query(LearningPath).all()
+        return [
+            {
+                "id": path.id,
+                "title": path.title,
+                "description": path.description,
+                "category": path.category,
+                "path_metadata": path.path_metadata,
+                "created_at": path.created_at
+            }
+            for path in paths
+        ]
+    finally:
+        db.close()
+
+@app.get("/learning-paths/{path_id}")
+def get_learning_path(path_id: int):
+    """Get a specific learning path"""
+    db = SessionLocal()
+    try:
+        path = db.query(LearningPath).filter(LearningPath.id == path_id).first()
+        if not path:
+            raise HTTPException(status_code=404, detail="Learning path not found")
+        return {
+            "id": path.id,
+            "title": path.title,
+            "description": path.description,
+            "category": path.category,
+            "path_metadata": path.path_metadata,
+            "created_at": path.created_at
+        }
+    finally:
+        db.close()
+
+@app.get("/learning-paths/{path_id}/tutorials")
+def get_tutorials(path_id: int):
+    """Get tutorials for a specific learning path"""
+    db = SessionLocal()
+    try:
+        tutorials = db.query(Tutorial)\
+            .filter(Tutorial.learning_path_id == path_id)\
+            .order_by(Tutorial.order)\
+            .all()
+        
+        return [
+            {
+                "id": tutorial.id,
+                "title": tutorial.title,
+                "description": tutorial.description,
+                "content": tutorial.content,
+                "order": tutorial.order,
+                "estimated_duration": tutorial.estimated_duration,
+                "created_at": tutorial.created_at
+            }
+            for tutorial in tutorials
+        ]
+    finally:
+        db.close()
 
 @app.post("/documents")
 async def upload_document(file: UploadFile):
