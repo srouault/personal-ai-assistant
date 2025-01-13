@@ -12,7 +12,8 @@ class LlmAssistantFrontend extends LitElement {
     inputText: { type: String },
     isLoading: { type: Boolean },
     waitingForFirstToken: { type: Boolean },
-    selectedChatId: { type: Number }
+    selectedChatId: { type: Number },
+    currentTutorial: { type: Object }
   };
 
   static styles = [
@@ -39,8 +40,10 @@ class LlmAssistantFrontend extends LitElement {
     this.isLoading = false;
     this.waitingForFirstToken = false;
     this.selectedChatId = null;
+    this.currentTutorial = null;
     console.log('LlmAssistantFrontend initialized');
     this.initializeChat();
+    this.addEventListener('start-tutorial', this.handleTutorialStart);
   }
 
   async initializeChat() {
@@ -304,6 +307,20 @@ class LlmAssistantFrontend extends LitElement {
     const question = e.detail.question;
     this.inputText = question;
     this.sendMessage();
+  }
+
+  handleTutorialStart(event) {
+    this.currentTutorial = event.detail;
+    // Create an initial message to start the tutorial
+    const initialMessage = `I'd like to start the tutorial "${event.detail.title}". Please guide me through it.`;
+    
+    // Add the message to the chat
+    if (this.chatPanel) {
+      this.chatPanel.addMessage({
+        role: 'user',
+        content: initialMessage
+      });
+    }
   }
 
   render() {

@@ -479,6 +479,35 @@ export class LearningPanel extends LitElement {
     .metadata-label {
       font-weight: 500;
     }
+
+    .start-tutorial-container {
+      display: flex;
+      justify-content: center;
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid #444;
+    }
+
+    .start-tutorial-button {
+      background-color: rgb(147, 51, 234);
+      color: white;
+      padding: 0.75rem 2rem;
+      border-radius: 0.5rem;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .start-tutorial-button:hover {
+      background-color: rgb(126, 34, 206);
+    }
+
+    .start-tutorial-button:focus {
+      outline: none;
+      ring: 2px;
+      ring-color: rgb(147, 51, 234);
+    }
   `;
 
   togglePanel() {
@@ -573,6 +602,21 @@ export class LearningPanel extends LitElement {
     };
   }
 
+  startTutorial() {
+    const tutorialEvent = new CustomEvent('start-tutorial', {
+      detail: {
+        title: this.selectedContext.title,
+        content: this.selectedContext.content,
+        type: 'tutorial'
+      },
+      bubbles: true,
+      composed: true
+    });
+    this.dispatchEvent(tutorialEvent);
+    this.closeDocument();
+    this.togglePanel();
+  }
+
   connectedCallback() {
     super.connectedCallback();
     this.fetchLearningPaths();
@@ -598,6 +642,11 @@ export class LearningPanel extends LitElement {
                   <span class="metadata-label">Duration:</span>
                   <span class="metadata-value">${this.selectedContext.metadata.duration} min</span>
                 </div>
+              </div>
+              <div class="start-tutorial-container">
+                <button @click=${this.startTutorial} class="start-tutorial-button">
+                  Start Tutorial
+                </button>
               </div>
             ` : ''}
           </div>
