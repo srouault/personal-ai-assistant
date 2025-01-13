@@ -105,6 +105,12 @@ async def generate_stream(request: ChatRequest, chat_id: int):
                     for ctx in previous_contexts
                 }
                 logging.info("Using context from previous interaction")
+            else:
+                context_response = await llm_service.get_context(user_message)
+                context = context_response[0]
+                context_documents = context_response[1]
+
+
         
         elif prediction == "Reference":
             # Query memory collection first
@@ -123,13 +129,14 @@ async def generate_stream(request: ChatRequest, chat_id: int):
 
                     memory_assistant_msg = await db_service.get_assistant_message_id_and_content_by_chat_id_interaction_id(chat_id=mem_chat_id, interaction_id=mem_interaction_id)
 
-                    # Parse the timestamp to a more readable format
-                    timestamp = datetime.fromisoformat(mem['timestamp'])
-                    formatted_time = timestamp.strftime("%A the %d of %B at %I:%M %p")
-                    
-                    memory_prompts.append(
-                        f"On {formatted_time}, the conversation was: {mem['content']} \n\nThe assistant responded with: {memory_assistant_msg[0]['content']}"
-                    )
+                    if len(memory_assistant_msg) > 0:
+                        # Parse the timestamp to a more readable format
+                        timestamp = datetime.fromisoformat(mem['timestamp'])
+                        formatted_time = timestamp.strftime("%A the %d of %B at %I:%M %p")
+
+                        memory_prompts.append(
+                            f"On {formatted_time}, the conversation was: {mem['content']} \n\nThe assistant responded with: {memory_assistant_msg[0]['content']}"
+                        )
                 
                 # Create a special prompt for memory references
                 memory_context = "\n\n".join(memory_prompts)

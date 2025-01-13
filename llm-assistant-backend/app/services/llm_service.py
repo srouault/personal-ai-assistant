@@ -102,7 +102,7 @@ When given factual context:
                     json={
                         "query": query,
                         "num_results": 3,
-                        "min_similarity": 0.2
+                        "min_similarity": 0.25
                     }
                 ) as response:
                     if response.status == 200:
