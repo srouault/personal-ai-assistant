@@ -11,8 +11,9 @@ from langchain_community.vectorstores import Chroma
 from langchain.schema import Document
 from app.models.document import QueryResponse, QueryResult, DocumentMetadata, RelevanceLevel, \
     MemoryData, MemoryResponse
-from ..models.database import SessionLocal, ContextDocument
-
+from ..models.database import Document as DBDocument, SessionLocal
+from pypdf import PdfReader
+from io import BytesIO
 
 class DocumentService:
     def __init__(self):
@@ -66,13 +67,114 @@ class DocumentService:
             chunks.append(' '.join(current_chunk))
         
         return chunks
-
+    
     async def async_add_document(self, filename: str, content: bytes, collection: str = "context"):
         try:
-            await self.add_document(filename, content, collection)
+            db = self.context_collection if collection == "context" else self.memory_collection
+            
+            # Check if document with this filename already exists
+            existing_docs = db._collection.get(
+                where={"source": filename}
+            )
+            if existing_docs['ids']:
+                logging.info(f"Document {filename} already exists in {collection}, skipping")
+                return existing_docs['ids'][0]
+
+            # Extract text based on file type
+            text = self._get_file_content(filename, content)
+            doc_id = str(uuid.uuid4())
+            
+            # Split text into chunks
+            chunks = []
+            current_chunk = []
+            current_length = 0
+            
+            # First split by paragraphs
+            paragraphs = text.split('\n\n')
+            
+            for paragraph in paragraphs:
+                # Further split long paragraphs into sentences
+                sentences = paragraph.replace('\n', ' ').split('.')
+                
+                for sentence in sentences:
+                    sentence = sentence.strip() + '.'
+                    sentence_length = len(sentence)
+                    
+                    if current_length + sentence_length > 500:  # Max chunk size
+                        if current_chunk:
+                            chunks.append(' '.join(current_chunk))
+                        current_chunk = [sentence]
+                        current_length = sentence_length
+                    else:
+                        current_chunk.append(sentence)
+                        current_length += sentence_length
+                
+                # Add paragraph break if we're continuing the same chunk
+                if current_chunk:
+                    current_chunk.append('\n\n')
+                    current_length += 2
+            
+            # Add the last chunk if it exists
+            if current_chunk:
+                chunks.append(' '.join(current_chunk).strip())
+            
+            logging.info(f"Processing document {filename} with {len(chunks)} chunks for {collection}")
+            
+            documents = []
+            for i, chunk in enumerate(chunks):
+                documents.append(
+                    Document(
+                        page_content=chunk,
+                        metadata={
+                            "source": filename,
+                            "full_document": text,
+                            "collection": collection,
+                            "chunk_id": i,
+                            "total_chunks": len(chunks),
+                            "file_type": Path(filename).suffix.lower()
+                        }
+                    )
+                )
+            
+            db.add_documents(documents)
+            db.persist()
+            
+            logging.info(f"Successfully added document {filename} to {collection} with ID {doc_id}")
+            return doc_id
+            
         except Exception as e:
-            logging.error(f"Error adding document: {str(e)}")
+            logging.error(f"Error adding document to {collection}: {str(e)}")
+            logging.exception("Full traceback:")
             raise
+
+    def _extract_text_from_pdf(self, content: bytes) -> str:
+        """Extract text content from a PDF file"""
+        try:
+            pdf_file = BytesIO(content)
+            pdf_reader = PdfReader(pdf_file)
+            text = []
+            
+            for page in pdf_reader.pages:
+                text.append(page.extract_text())
+            
+            return "\n\n".join(text)
+        except Exception as e:
+            logging.error(f"Error extracting text from PDF: {str(e)}")
+            raise
+
+    def _get_file_content(self, filename: str, content: bytes) -> str:
+        """Extract text content based on file type"""
+        file_extension = Path(filename).suffix.lower()
+        
+        if file_extension == '.pdf':
+            return self._extract_text_from_pdf(content)
+        else:
+            # Assume text file for other extensions
+            try:
+                return content.decode('utf-8')
+            except UnicodeDecodeError:
+                logging.error(f"Failed to decode file {filename} as UTF-8")
+                raise ValueError(f"Unsupported file format or encoding: {filename}")
 
     def add_document(self, filename: str, content: bytes, collection: str = "context"):
         try:
@@ -86,9 +188,10 @@ class DocumentService:
                 logging.info(f"Document {filename} already exists in {collection}, skipping")
                 return existing_docs['ids'][0]
 
-            text = content.decode('utf-8')
-
-            doc_id = self.add_document_to_db(filename, content)
+            # Extract text based on file type
+            text = self._get_file_content(filename, content)
+            doc_id = str(uuid.uuid4())
+            
             # Split text into chunks
             chunks = []
             current_chunk = []
@@ -133,10 +236,10 @@ class DocumentService:
                         metadata={
                             "source": filename,
                             "full_document": text,  # Keep full document in metadata
-                            "document_id": doc_id,
                             "collection": collection,
                             "chunk_id": i,  # Add chunk identifier
-                            "total_chunks": len(chunks)
+                            "total_chunks": len(chunks),
+                            "file_type": Path(filename).suffix.lower()  # Add file type to metadata
                         }
                     )
                 )
@@ -206,9 +309,6 @@ class DocumentService:
             # Convert back to list and format results
             formatted_results = []
             for doc, similarity in source_results.values():
-                document_id = doc.metadata.get("document_id")
-                full_content = await self.get_document_content(document_id)
-                
                 # Get relevance level
                 relevance = self._get_relevance_level(similarity)
                 
@@ -221,14 +321,17 @@ class DocumentService:
                     logging.info(f"Skipping result due to low relevance: {relevance} < {min_relevance}")
                     continue
                 
+                # Use the full_document from metadata if available, otherwise use the chunk content
+                full_document = doc.metadata.get("full_document", doc.page_content)
+                
                 result = QueryResult(
                     text=doc.page_content,
                     metadata=DocumentMetadata(
                         source=doc.metadata["source"],
-                        full_document=full_content,  # Get from SQLite
+                        full_document=full_document or "",  # Provide empty string as fallback
                         similarity=float(similarity),
                         relevance=relevance,
-                        document_id=document_id  # Add document_id to metadata
+                        document_id=doc.metadata.get("document_id")
                     ),
                     is_relevant=self._is_relevant(relevance)
                 )
@@ -404,19 +507,14 @@ class DocumentService:
 
     async def get_document_content(self, document_id: int) -> str:
         """Retrieve full document content from SQLite"""
-        doc = self.db.query(ContextDocument).filter_by(id=document_id).first()
+        doc = self.db.query(DBDocument).filter_by(id=document_id).first()
         return doc.content if doc else None
 
-    def add_document_to_db(self, filename: str, content: bytes):
-        # Create document in SQLite
-        doc = ContextDocument(
-            filename=filename,
-            content=content,
-            collection="context"
-        )
+    def add_document_to_db(self, filename: str, content: bytes, collection: str = "context"):
+        """Add a document to the SQLite database and return row"""
+        doc = DBDocument(filename=filename, content=content)
         self.db.add(doc)
         self.db.commit()
-        self.db.refresh(doc)  # This ensures we get the ID back
 
         return doc.id
 

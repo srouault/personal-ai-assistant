@@ -1,45 +1,39 @@
 import os
-
-
-os.environ["LANGCHAIN_DISABLE_TELEMETRY"] = "true"
-
-from app.services.document_service import DocumentService
+import asyncio
+from pathlib import Path
 import logging
+from app.services.document_service import DocumentService
 
-def load_documents(documents_dir="documents"):
-    # Initialize document service
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+async def load_documents():
     document_service = DocumentService()
-    
-    # Load documents from the documents directory
-    loaded_sources = set()
-    
-    for filename in os.listdir(documents_dir):
-        if filename.endswith(".txt"):
-            source_name = os.path.basename(filename)
-            
-            if source_name in loaded_sources:
-                logging.info(f"Document {source_name} already processed in this session, skipping")
-                continue
+    documents_dir = Path("documents")
 
-            file_path = os.path.join(documents_dir, filename)
+    if not documents_dir.exists():
+        logger.error(f"Documents directory not found: {documents_dir}")
+        return
+
+    # Supported file extensions
+    supported_extensions = {'.txt', '.pdf'}
+
+    for file_path in documents_dir.iterdir():
+        if file_path.suffix.lower() in supported_extensions:
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    text = f.read()
-
-                # Use document service to add the document
-                document_service.add_document(
-                    filename=source_name,
-                    content=text.encode('utf-8'),
-                    collection="context"
+                logger.info(f"Processing file: {file_path}")
+                with open(file_path, 'rb') as f:
+                    content = f.read()
+                await document_service.async_add_document(
+                    filename=file_path.name,
+                    content=content
                 )
-                
-                loaded_sources.add(source_name)
-                logging.info(f"Loaded document: {source_name}")
+                logger.info(f"Successfully processed {file_path}")
             except Exception as e:
-                logging.error(f"Error loading {source_name}: {str(e)}")
-
-    logging.info("Finished loading documents")
+                logger.error(f"Error processing {file_path}: {str(e)}")
+                logger.exception("Full traceback:")
+        else:
+            logger.warning(f"Skipping unsupported file: {file_path}")
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    load_documents() 
+    asyncio.run(load_documents()) 

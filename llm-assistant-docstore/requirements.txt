@@ -7,3 +7,4 @@ langchain-community>=0.0.10
 sentence-transformers  # For initial download
 chromadb>=0.4.22
 numpy>=1.24.0
+pypdf==4.0.1
