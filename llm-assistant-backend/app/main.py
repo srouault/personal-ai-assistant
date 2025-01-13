@@ -124,7 +124,7 @@ async def generate_stream(request: ChatRequest, chat_id: int):
                 # Format memory results for a more natural response
                 memory_prompts = []
                 for mem in memory_results["results"]:
-                    mem_chat_id  = mem['chat_id']
+                    mem_chat_id = mem['chat_id']
                     mem_interaction_id = mem['interaction_id']
 
                     memory_assistant_msg = await db_service.get_assistant_message_id_and_content_by_chat_id_interaction_id(chat_id=mem_chat_id, interaction_id=mem_interaction_id)
@@ -135,7 +135,9 @@ async def generate_stream(request: ChatRequest, chat_id: int):
                         formatted_time = timestamp.strftime("%A the %d of %B at %I:%M %p")
 
                         memory_prompts.append(
-                            f"On {formatted_time}, the conversation was: {mem['content']} \n\nThe assistant responded with: {memory_assistant_msg[0]['content']}"
+                            f"""On {formatted_time}, the conversation was: {mem['content']} \n\nThe assistant responded with: {memory_assistant_msg[0]['content']}\n\nReference: {mem_chat_id},{mem_interaction_id}
+
+If you want to go back to that conversation, click here: <<<chat_history>>>{mem_chat_id},{mem_interaction_id}<<<chat_history>>>"""
                         )
                 
                 # Create a special prompt for memory references

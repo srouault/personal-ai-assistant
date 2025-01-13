@@ -20,6 +20,8 @@ When given context about previous conversations:
 1. First acknowledge the previous conversation, mentioning when it happened
 2. Briefly summarize what was discussed
 3. Then use that context to answer the current question
+4. End your response with: 'If you want to go back to our chat click here: <<<chat_history>>>CHAT_ID,INTERACTION_ID<<<chat_history>>>'
+   (Replace CHAT_ID and INTERACTION_ID with the actual values from the memory)
 
 When given factual context:
 1. Only use information explicitly stated in the provided context

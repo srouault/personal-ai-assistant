@@ -201,6 +201,31 @@ export class ChatWindow extends LitElement {
       .dot:nth-child(1) { animation-delay: 0s; }
       .dot:nth-child(2) { animation-delay: 0.3s; }
       .dot:nth-child(3) { animation-delay: 0.6s; }
+
+      button[data-chat-id] {
+        cursor: pointer;
+        transition: background-color 0.2s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 2.5rem;
+        line-height: 1;
+      }
+
+      .take-me-there-btn {
+        width: 120px;
+        padding: 0px;
+        padding-bottom: 10px;
+        font-weight: bold;
+      }
+
+      button[data-chat-id]:hover {
+        background-color: #3b82f6;
+      }
+
+      .message-bubble button {
+        margin-top: 8px;
+      }
     `
   ];
 
@@ -217,9 +242,35 @@ export class ChatWindow extends LitElement {
     }));
   }
 
+  processMessageContent(content) {
+    if (!content) return '';
+    
+    const regex = /<<<chat_history>>>(\d+),(\d+)<<<chat_history>>>/;
+    const match = content.match(regex);
+    
+    if (match) {
+      const [fullMatch, chatId, interactionId] = match;
+      console.log('Found chat history link:', { chatId, interactionId });
+      
+      const buttonHtml = `<button 
+        class="bg-blue-500 hover:bg-blue-700 text-white font-bold take-me-there-btn"
+        data-chat-id="${chatId}" 
+        data-interaction-id="${interactionId}">
+        Take Me There
+      </button>`;
+      
+      console.log('Generated button HTML:', buttonHtml);
+      return content.replace(fullMatch, buttonHtml);
+    }
+    
+    return content;
+  }
+
   formatContent(message) {
     if (message.role === 'assistant') {
-      const content = message.content;
+      console.log('Formatting assistant message:', message);
+      const content = this.processMessageContent(message.content);
+      console.log('Processed content:', content);
       const segments = [];
       let currentPosition = 0;
 
@@ -227,7 +278,6 @@ export class ChatWindow extends LitElement {
         const nextCodeBlock = content.indexOf('```', currentPosition);
 
         if (nextCodeBlock === -1) {
-          // Preserve whitespace in remaining text
           if (currentPosition < content.length) {
             segments.push({
               type: 'text',
@@ -237,7 +287,6 @@ export class ChatWindow extends LitElement {
           break;
         }
 
-        // Preserve whitespace in text before code block
         if (nextCodeBlock > currentPosition) {
           segments.push({
             type: 'text',
@@ -248,22 +297,20 @@ export class ChatWindow extends LitElement {
         const codeStart = content.indexOf('\n', nextCodeBlock + 3);
         const codeEnd = content.indexOf('```', codeStart);
         
-        const language = content.slice(nextCodeBlock + 3, codeStart).trim(); // Only trim language identifier
+        const language = content.slice(nextCodeBlock + 3, codeStart).trim();
 
         if (codeEnd === -1) {
-          // Preserve whitespace in incomplete code block
           segments.push({
             type: 'code',
             language: language || 'text',
-            content: content.slice(codeStart + 1) // Keep the newline
+            content: content.slice(codeStart + 1)
           });
           break;
         } else {
-          // Preserve whitespace in complete code block
           segments.push({
             type: 'code',
             language: language || 'text',
-            content: content.slice(codeStart + 1, codeEnd) // Keep the newline
+            content: content.slice(codeStart + 1, codeEnd)
           });
           currentPosition = codeEnd + 3;
         }
@@ -274,7 +321,6 @@ export class ChatWindow extends LitElement {
           if (segment.type === 'code') {
             return html`<code-block .language=${segment.language} .code=${segment.content}></code-block>`;
           } else {
-            // Configure markdown to preserve whitespace
             return unsafeHTML(md.render(segment.content));
           }
         })}
@@ -304,7 +350,70 @@ export class ChatWindow extends LitElement {
 
   async firstUpdated() {
     this.scrollToBottom();
+    
+    // Debug button rendering
+    setTimeout(() => {
+      const buttons = this.shadowRoot.querySelectorAll('button[data-chat-id]');
+      console.log('Found navigation buttons:', buttons.length);
+      buttons.forEach(button => {
+        console.log('Button data:', {
+          chatId: button.dataset.chatId,
+          interactionId: button.dataset.interactionId,
+          html: button.outerHTML
+        });
+      });
+    }, 1000);
   }
+
+  constructor() {
+    super();
+    this.messages = [];
+    this.inputText = '';
+    this.isLoading = false;
+    this.waitingForFirstToken = false;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    console.log('Adding click event listener');
+    this.addEventListener('click', this._handleClick);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    console.log('Removing click event listener');
+    this.removeEventListener('click', this._handleClick);
+  }
+
+  _handleClick = (e) => {
+    console.log('Click event received in chat-window:', e.target);
+    
+    const button = e.target.closest('button[data-chat-id]');
+    console.log('Found button:', button);
+    
+    if (button) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const chatId = parseInt(button.dataset.chatId);
+      const interactionId = parseInt(button.dataset.interactionId);
+      
+      console.log('Attempting navigation with:', { chatId, interactionId });
+      
+      try {
+        const event = new CustomEvent('navigate-to-chat', {
+          detail: { chatId, interactionId },
+          bubbles: true,
+          composed: true
+        });
+        console.log('Dispatching navigation event:', event);
+        this.dispatchEvent(event);
+        console.log('Navigation event dispatched');
+      } catch (error) {
+        console.error('Error dispatching navigation event:', error);
+      }
+    }
+  };
 
   render() {
     return html`
@@ -318,10 +427,10 @@ export class ChatWindow extends LitElement {
         </div>
 
         <div class="messages-container bg-gray-100">
-          <div class="messages-scroll space-y-4">
+          <div class="messages-scroll space-y-4" @click=${this._handleClick}>
             ${this.messages.map((message, index) => html`
               <div class="flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}"
-                   @rendered=${() => this.scrollToBottom()}>
+                   data-interaction-id="${message.interaction_id}">
                 <div class="${message.role === 'user' 
                   ? 'bg-blue-500 text-white' 
                   : 'bg-white text-gray-800'} 

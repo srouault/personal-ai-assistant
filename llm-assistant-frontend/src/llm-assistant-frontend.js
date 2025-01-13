@@ -38,6 +38,7 @@ class LlmAssistantFrontend extends LitElement {
     this.isLoading = false;
     this.waitingForFirstToken = false;
     this.selectedChatId = null;
+    console.log('LlmAssistantFrontend initialized');
     this.initializeChat();
   }
 
@@ -63,12 +64,16 @@ class LlmAssistantFrontend extends LitElement {
       const response = await fetch(`http://localhost:8080/chats/${chatId}`);
       if (response.ok) {
         const chat = await response.json();
-        // Flatten the interactions into messages and ensure correct order
-        this.messages = chat.interactions
-          .flatMap(interaction => [
-            interaction.messages.find(m => m.role === 'user'),
-            interaction.messages.find(m => m.role === 'assistant')
-          ].filter(Boolean));  // filter out any undefined messages
+        this.messages = chat.interactions.flatMap(interaction => [
+          {
+            ...interaction.messages.find(m => m.role === 'user'),
+            interaction_id: interaction.interaction_id
+          },
+          {
+            ...interaction.messages.find(m => m.role === 'assistant'),
+            interaction_id: interaction.interaction_id
+          }
+        ].filter(Boolean));
       }
     } catch (error) {
       console.error('Error loading chat:', error);
@@ -186,6 +191,77 @@ class LlmAssistantFrontend extends LitElement {
     }
   }
 
+  async handleNavigateToChat(e) {
+    console.log('Navigation event received:', e.detail);
+    const { chatId, interactionId } = e.detail;
+    this.selectedChatId = chatId;
+    
+    try {
+      console.log('Fetching chat:', chatId);
+      const response = await fetch(`http://localhost:8080/chats/${chatId}`);
+      if (response.ok) {
+        const chat = await response.json();
+        console.log('Received chat data:', chat);
+        
+        this.messages = chat.interactions.flatMap(interaction => [
+          {
+            ...interaction.messages.find(m => m.role === 'user'),
+            interaction_id: interaction.interaction_id
+          },
+          {
+            ...interaction.messages.find(m => m.role === 'assistant'),
+            interaction_id: interaction.interaction_id
+          }
+        ].filter(Boolean));
+        console.log('Updated messages:', this.messages);
+
+        // Wait for messages to render then scroll to the interaction
+        await this.updateComplete;
+        const chatWindow = this.shadowRoot.querySelector('chat-window');
+        console.log('Found chat window:', chatWindow);
+        
+        if (chatWindow) {
+          // Find the messages-scroll container first
+          const scrollContainer = chatWindow.shadowRoot.querySelector('.messages-scroll');
+          console.log('Found scroll container:', scrollContainer);
+          
+          if (scrollContainer) {
+            const messageElement = scrollContainer.querySelector(
+              `[data-interaction-id="${interactionId}"]`
+            );
+            console.log('Found message element:', messageElement);
+            
+            if (messageElement) {
+              // Scroll the messages-scroll container
+              scrollContainer.scrollTo({
+                top: messageElement.offsetTop - scrollContainer.offsetHeight / 2,
+                behavior: 'smooth'
+              });
+              console.log('Scrolled to message');
+              
+              // Add highlight effect
+              messageElement.style.backgroundColor = '#fef3c7';
+              setTimeout(() => {
+                messageElement.style.backgroundColor = '';
+                console.log('Removed highlight effect');
+              }, 2000);
+            } else {
+              console.log('Message element not found for interaction:', interactionId);
+            }
+          } else {
+            console.log('Scroll container not found');
+          }
+        } else {
+          console.log('Chat window not found');
+        }
+      } else {
+        console.error('Failed to fetch chat:', response.status);
+      }
+    } catch (error) {
+      console.error('Error in handleNavigateToChat:', error);
+    }
+  }
+
   render() {
     return html`
       <div class="app-container">
@@ -206,6 +282,7 @@ class LlmAssistantFrontend extends LitElement {
             @input-change=${this.handleInputChange}
             @send-message=${this.sendMessage}
             @new-chat=${this.handleNewChat}
+            @navigate-to-chat=${this.handleNavigateToChat}
           ></chat-window>
           
           <context-panel></context-panel>
