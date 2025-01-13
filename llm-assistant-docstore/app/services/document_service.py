@@ -80,9 +80,19 @@ class DocumentService:
                 logging.info(f"Document {filename} already exists in {collection}, skipping")
                 return existing_docs['ids'][0]
 
+            # First store in SQLite to get document_id
+            doc = DBDocument(
+                filename=filename,
+                content=content,
+                file_type=Path(filename).suffix.lower()
+            )
+            self.db.add(doc)
+            self.db.commit()
+            document_id = doc.id
+            logging.info(f"Stored document in SQLite with ID: {document_id}")
+
             # Extract text based on file type
             text = self._get_file_content(filename, content)
-            doc_id = str(uuid.uuid4())
             
             # Split text into chunks
             chunks = []
@@ -127,7 +137,7 @@ class DocumentService:
                         page_content=chunk,
                         metadata={
                             "source": filename,
-                            "full_document": text,
+                            "document_id": document_id,  # Add SQLite document ID
                             "collection": collection,
                             "chunk_id": i,
                             "total_chunks": len(chunks),
@@ -139,8 +149,8 @@ class DocumentService:
             db.add_documents(documents)
             db.persist()
             
-            logging.info(f"Successfully added document {filename} to {collection} with ID {doc_id}")
-            return doc_id
+            logging.info(f"Successfully added document {filename} to {collection} with ID {document_id}")
+            return document_id
             
         except Exception as e:
             logging.error(f"Error adding document to {collection}: {str(e)}")
@@ -321,17 +331,25 @@ class DocumentService:
                     logging.info(f"Skipping result due to low relevance: {relevance} < {min_relevance}")
                     continue
                 
-                # Use the full_document from metadata if available, otherwise use the chunk content
-                full_document = doc.metadata.get("full_document", doc.page_content)
+                # Get full document from SQLite if document_id is available
+                document_id = doc.metadata.get("document_id")
+                full_content = None
+                if document_id:
+                    db_doc = self.db.query(DBDocument).filter_by(id=document_id).first()
+                    if db_doc:
+                        try:
+                            full_content = self._get_file_content(db_doc.filename, db_doc.content)
+                        except Exception as e:
+                            logging.error(f"Error extracting content for document {document_id}: {e}")
                 
                 result = QueryResult(
                     text=doc.page_content,
                     metadata=DocumentMetadata(
                         source=doc.metadata["source"],
-                        full_document=full_document or "",  # Provide empty string as fallback
+                        full_document=full_content or doc.page_content,  # Fallback to chunk content
                         similarity=float(similarity),
                         relevance=relevance,
-                        document_id=doc.metadata.get("document_id")
+                        document_id=document_id
                     ),
                     is_relevant=self._is_relevant(relevance)
                 )
