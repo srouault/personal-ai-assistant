@@ -2,7 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { marked } from 'marked';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 
-export class ContextPanel extends LitElement {
+export class LearningPanel extends LitElement {
   static properties = {
     query: { type: String },
     isVisible: { type: Boolean },
@@ -92,10 +92,11 @@ export class ContextPanel extends LitElement {
       left: -40px;
       width: 40px;
       height: 120px;
+      top: 121px;
       writing-mode: vertical-rl;
       text-orientation: mixed;
       transform: rotate(0deg);
-      background-color: rgb(59, 130, 246);
+      background-color: #7c3aed;
       color: white;
       border: none;
       cursor: pointer;
@@ -109,7 +110,7 @@ export class ContextPanel extends LitElement {
     }
 
     .toggle-button:hover {
-      background-color: rgb(37, 99, 235);
+      background-color: #6d28d9;
     }
 
     .toggle-button:focus {
@@ -243,11 +244,6 @@ export class ContextPanel extends LitElement {
       border-bottom: 1px solid #e5e7eb;
     }
 
-    .document-content .content-text {
-      color: #fff;
-      line-height: 1.625;
-      font-size: 0.875rem;
-    }
 
     .close-button {
       position: absolute;
@@ -423,12 +419,7 @@ export class ContextPanel extends LitElement {
              @click=${(e) => e.target === e.currentTarget && this.closeDocument()}>
           <div class="document-content">
             <button class="close-button" @click=${this.closeDocument}>&times;</button>
-            <h2>${this.selectedContext?.source}</h2>
-            <div class="markdown-content">
-              ${this.selectedContext?.fullDocument ? 
-                unsafeHTML(marked.parse(this.selectedContext.fullDocument)) : 
-                ''}
-            </div>
+            <!-- TODO: Add learning path content here -->
           </div>
         </div>
 
@@ -440,44 +431,15 @@ export class ContextPanel extends LitElement {
             <span class="arrow-icon">
               ${this.isVisible ? '\u2190' : '\u2192'}
             </span>
-            <span class="button-text">Context</span>
+            <span class="button-text">Learning</span>
           </button>
 
           <div class="panel-header">
-            <h3 class="text-lg font-semibold text-gray-700 title-text">Related Context</h3>
+            <h3 class="text-lg font-semibold text-gray-700 title-text">Learning Paths</h3>
           </div>
 
           <div class="panel-content">
-            <div class="context-items">
-              ${this.contexts.length === 0 
-                ? html`<p class="text-gray-500 text-context italic">No context available</p>`
-                : this.contexts.map(context => html`
-                    <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 
-                              hover:border-gray-300 transition-colors duration-200
-                              hover:shadow-sm text-context context-item"
-                       @click=${() => this.showFullDocument(context)}>
-                      <p class="text-gray-700 text-sm leading-relaxed mb-2">${context.text}</p>
-                      <div class="metadata-container">
-                        <div class="metadata-item source-item">
-                          <span class="metadata-label">Source:</span>
-                          <span class="metadata-value">${context.source}</span>
-                        </div>
-                        <div class="metrics-container">
-                          <div class="metadata-item">
-                            <span class="relevance-badge relevance-${context.relevance.toLowerCase()}">
-                              ${context.relevance.toLowerCase()}
-                            </span>
-                          </div>
-                          <div class="metadata-item">
-                            <span class="metadata-label">Similarity:</span>
-                            <span class="metadata-value">${context.similarity.toFixed(3)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  `)
-              }
-            </div>
+            <!-- TODO: Add learning path items here -->
           </div>
         </div>
       </div>
@@ -485,4 +447,4 @@ export class ContextPanel extends LitElement {
   }
 }
 
-customElements.define('context-panel', ContextPanel); 
+customElements.define('learning-panel', LearningPanel); 

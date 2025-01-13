@@ -4,6 +4,7 @@ import { marked } from 'marked';
 import './components/chat-window.js';
 import './components/context-panel.js';
 import './components/chat-history.js';
+import './components/learning-panel.js';
 
 class LlmAssistantFrontend extends LitElement {
   static properties = {
@@ -299,6 +300,12 @@ class LlmAssistantFrontend extends LitElement {
     }
   }
 
+  handleLearningQuestion(e) {
+    const question = e.detail.question;
+    this.inputText = question;
+    this.sendMessage();
+  }
+
   render() {
     return html`
       <div class="app-container">
@@ -323,6 +330,7 @@ class LlmAssistantFrontend extends LitElement {
           ></chat-window>
           
           <context-panel></context-panel>
+          <learning-panel @ask-question=${this.handleLearningQuestion}></learning-panel>
         </div>
       </div>
     `;
