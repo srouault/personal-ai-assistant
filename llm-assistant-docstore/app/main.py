@@ -2,7 +2,8 @@ from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.document_service import DocumentService
 from app.models.document import QueryRequest, QueryResponse, Memory, MemoryResponse
-from app.models.database import SessionLocal, LearningPath, Tutorial
+from app.models.database import SessionLocal, LearningPath, Tutorial, TutorialChapter, UserProgress
+from sqlalchemy.sql import func
 import logging
 
 app = FastAPI()
@@ -89,6 +90,63 @@ def get_tutorials(path_id: int):
     finally:
         db.close()
 
+@app.get("/tutorials/{tutorial_id}/chapters")
+def get_tutorial_chapters(tutorial_id: int):
+    """Get chapters for a specific tutorial"""
+    db = SessionLocal()
+    try:
+        chapters = db.query(TutorialChapter)\
+            .filter(TutorialChapter.tutorial_id == tutorial_id)\
+            .order_by(TutorialChapter.order)\
+            .all()
+        
+        return [
+            {
+                "id": chapter.id,
+                "title": chapter.title,
+                "content": chapter.content,
+                "order": chapter.order
+            }
+            for chapter in chapters
+        ]
+    finally:
+        db.close()
+
+@app.get("/progress/{chat_id}/{tutorial_id}")
+def get_tutorial_progress(chat_id: str, tutorial_id: int):
+    """Get user's progress for a specific tutorial"""
+    db = SessionLocal()
+    try:
+        progress = db.query(UserProgress)\
+            .filter(
+                UserProgress.user_id == chat_id,
+                UserProgress.tutorial_id == tutorial_id
+            ).all()
+        
+        return {
+            "completed_chapters": [p.chapter_id for p in progress if p.completed]
+        }
+    finally:
+        db.close()
+
+@app.post("/progress/{chat_id}/{tutorial_id}/{chapter_id}")
+def update_chapter_progress(chat_id: str, tutorial_id: int, chapter_id: int):
+    """Mark a chapter as completed"""
+    db = SessionLocal()
+    try:
+        progress = UserProgress(
+            user_id=chat_id,
+            tutorial_id=tutorial_id,
+            chapter_id=chapter_id,
+            completed=True,
+            completed_at=func.now()
+        )
+        db.add(progress)
+        db.commit()
+        return {"status": "success"}
+    finally:
+        db.close()
+
 @app.post("/documents")
 async def upload_document(file: UploadFile):
     try:
@@ -151,3 +209,38 @@ async def get_document(document_id: int):
         return {"content": document}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/tutorials/{tutorial_id}/chapters/{chapter_id}/context")
+def get_tutorial_chapter_context(tutorial_id: int, chapter_id: int):
+    """Get the context for a specific tutorial chapter"""
+    db = SessionLocal()
+    try:
+        chapter = db.query(TutorialChapter)\
+            .filter(
+                TutorialChapter.tutorial_id == tutorial_id,
+                TutorialChapter.id == chapter_id
+            ).first()
+        
+        if not chapter:
+            raise HTTPException(status_code=404, detail="Chapter not found")
+            
+        tutorial = db.query(Tutorial)\
+            .filter(Tutorial.id == tutorial_id)\
+            .first()
+            
+        # Get total number of chapters
+        total_chapters = db.query(TutorialChapter)\
+            .filter(TutorialChapter.tutorial_id == tutorial_id)\
+            .count()
+            
+        return {
+            "tutorial_id": tutorial_id,
+            "tutorial_title": tutorial.title,
+            "chapter_id": chapter_id,
+            "chapter_title": chapter.title,
+            "content": chapter.content,
+            "order": chapter.order,
+            "total_chapters": total_chapters
+        }
+    finally:
+        db.close()

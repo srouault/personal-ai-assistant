@@ -13,7 +13,9 @@ class LlmAssistantFrontend extends LitElement {
     isLoading: { type: Boolean },
     waitingForFirstToken: { type: Boolean },
     selectedChatId: { type: Number },
-    currentTutorial: { type: Object }
+    currentTutorial: { type: Object },
+    currentTutorialProgress: { type: Object },
+    waitingForChapterConfirmation: { type: Boolean }
   };
 
   static styles = [
@@ -41,10 +43,14 @@ class LlmAssistantFrontend extends LitElement {
     this.waitingForFirstToken = false;
     this.selectedChatId = null;
     this.currentTutorial = null;
+    this.currentTutorialProgress = {
+      tutorialId: null,
+      currentChapter: 0,
+      completedChapters: []
+    };
+    this.waitingForChapterConfirmation = false;
     console.log('LlmAssistantFrontend initialized');
     this.initializeChat();
-    this.handleTutorialStart = this.handleTutorialStart.bind(this);
-    this.addEventListener('start-tutorial', this.handleTutorialStart);
   }
 
   async initializeChat() {
@@ -111,7 +117,12 @@ class LlmAssistantFrontend extends LitElement {
   }
 
   async sendMessage(e) {
-    if (!this.inputText.trim()) return;
+    // If called programmatically without an event (e.g. from handleTutorialStart)
+    if (!e && !this.inputText.trim()) return;
+    
+    // If called from a button click event
+    if (e && e.detail && !e.detail.trim()) return;
+
 
     if (!this.selectedChatId) {
       await this.initializeChat();
@@ -122,19 +133,22 @@ class LlmAssistantFrontend extends LitElement {
       return;
     }
 
+    // Use either the event detail or the component's inputText
+    const messageContent = e?.detail || this.inputText.trim();
+
     const userMessage = {
       role: 'user',
-      content: this.inputText.trim()
+      content: messageContent
     };
 
     const contextPanel = this.shadowRoot.querySelector('context-panel');
     if (contextPanel) {
-      contextPanel.fetchContext(this.inputText.trim())
+      contextPanel.fetchContext(messageContent)
         .catch(error => console.error('Error fetching context:', error));
     }
 
     this.messages = [...this.messages, userMessage];
-    this.inputText = '';
+    this.inputText = '';  // Clear input after using it
     this.isLoading = true;
     this.waitingForFirstToken = true;
 
@@ -145,7 +159,14 @@ class LlmAssistantFrontend extends LitElement {
     this.messages = [...this.messages, assistantMessage];
 
     try {
-      const response = await fetch(`http://localhost:8080/chat/stream?chat_id=${this.selectedChatId}`, {
+      // Construct the URL with tutorial context if available
+      let chatUrl = `http://localhost:8080/chat/stream?chat_id=${this.selectedChatId}`;
+      if (this.currentTutorial) {
+        const currentChapter = this.currentTutorial.chapters[this.currentTutorialProgress.currentChapter];
+        chatUrl += `&tutorial_id=${this.currentTutorial.tutorialId}&chapter_id=${currentChapter.id}`;
+      }
+
+      const response = await fetch(chatUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -187,6 +208,8 @@ class LlmAssistantFrontend extends LitElement {
           }
         }
       }
+
+
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -304,45 +327,151 @@ class LlmAssistantFrontend extends LitElement {
     }
   }
 
-  handleLearningQuestion(e) {
-    const question = e.detail.question;
-    this.inputText = question;
-    this.sendMessage();
-  }
-
   async handleTutorialStart(event) {
     console.log('Tutorial start event received:', event.detail);
     this.currentTutorial = event.detail;
+    this.currentTutorialProgress = {
+      tutorialId: event.detail.tutorialId,
+      currentChapter: 0,
+      completedChapters: []
+    };
+    this.waitingForChapterConfirmation = false;
     
-    // Start a new chat first
     try {
       const response = await fetch('http://localhost:8080/chat/latest/id');
       const data = await response.json();
       this.selectedChatId = (data.id || 0) + 1;
       console.log('Created new chat with ID:', this.selectedChatId);
       
-      // Clear existing messages
       this.messages = [];
+      this.isLoading = true;
+      this.waitingForFirstToken = true;
+
+      // Add initial user message only
+      const userMessage = {
+        role: 'user',
+        content: "Let's begin the tutorial."
+      };
       
-      // Set up the tutorial message
-      const initialMessage = `I'd like to start the tutorial "${event.detail.title}". Please guide me through it.`;
-      console.log('Setting initial message:', initialMessage);
-      
-      if (this.shadowRoot.querySelector('chat-window')) {
-        this.inputText = initialMessage;
-        console.log('Sending tutorial message...');
-        this.sendMessage();
-        
-        // Refresh chat list
-        const chatHistoryElement = this.shadowRoot.querySelector('chat-history');
-        if (chatHistoryElement) {
-          chatHistoryElement.loadChats();
+      // Don't add an empty assistant message yet
+      this.messages = [userMessage];
+
+      // Send message directly to API
+      let chatUrl = `http://localhost:8080/chat/stream?chat_id=${this.selectedChatId}`;
+      if (this.currentTutorial) {
+        const currentChapter = this.currentTutorial.chapters[this.currentTutorialProgress.currentChapter];
+        chatUrl += `&tutorial_id=${this.currentTutorial.tutorialId}&chapter_id=${currentChapter.id}`;
+      }
+
+      const streamResponse = await fetch(chatUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messages: this.messages,  // Only send the user message
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+      });
+
+      // Create assistant message for streaming response
+      const assistantMessage = {
+        role: 'assistant',
+        content: ''
+      };
+      this.messages = [...this.messages, assistantMessage];
+
+      const reader = streamResponse.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(5));
+              if (data.text) {
+                this.waitingForFirstToken = false;
+                assistantMessage.content += data.text;
+                this.messages = [...this.messages.slice(0, -1), assistantMessage];
+              }
+              if (data.error) {
+                console.error('Error:', data.error);
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE data:', e);
+            }
+          }
         }
-      } else {
-        console.error('Chat window not found');
       }
     } catch (error) {
       console.error('Error creating new chat for tutorial:', error);
+    } finally {
+      this.isLoading = false;
+      this.waitingForFirstToken = false;
+      // Refresh chat list
+      const chatHistoryElement = this.shadowRoot.querySelector('chat-history');
+      if (chatHistoryElement) {
+        chatHistoryElement.loadChats();
+      }
+    }
+  }
+
+  // Add this helper method to handle streaming responses
+  async streamResponse(chatUrl, userMessage, assistantMessage) {
+    try {
+      const response = await fetch(chatUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          messages: [...this.messages.slice(0, -1), userMessage],
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(5));
+              if (data.text) {
+                this.waitingForFirstToken = false;
+                assistantMessage.content += data.text;
+                this.messages = [...this.messages.slice(0, -1), assistantMessage];
+              }
+              if (data.error) {
+                console.error('Error:', data.error);
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE data:', e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in streamResponse:', error);
     }
   }
 
@@ -370,7 +499,10 @@ class LlmAssistantFrontend extends LitElement {
           ></chat-window>
           
           <context-panel></context-panel>
-          <learning-panel @ask-question=${this.handleLearningQuestion}></learning-panel>
+          <learning-panel 
+            .chatId=${this.selectedChatId}
+            @start-tutorial=${this.handleTutorialStart}
+          ></learning-panel>
         </div>
       </div>
     `;

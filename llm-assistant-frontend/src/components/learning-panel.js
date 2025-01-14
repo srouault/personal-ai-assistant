@@ -10,7 +10,10 @@ export class LearningPanel extends LitElement {
     selectedContext: { type: Object },
     learningPaths: { type: Array },
     selectedPath: { type: Object },
-    tutorials: { type: Array }
+    tutorials: { type: Array },
+    currentChapter: { type: Object },
+    completedChapters: { type: Array },
+    chatId: { type: String }
   };
 
   constructor() {
@@ -22,6 +25,9 @@ export class LearningPanel extends LitElement {
     this.learningPaths = [];
     this.selectedPath = null;
     this.tutorials = [];
+    this.currentChapter = null;
+    this.completedChapters = [];
+    this.chatId = null;
   }
 
   static styles = css`
@@ -592,14 +598,35 @@ export class LearningPanel extends LitElement {
   }
 
   async selectTutorial(tutorial) {
-    this.selectedContext = {
-      title: tutorial.title,
-      content: tutorial.content,
-      metadata: {
-        duration: tutorial.estimated_duration,
-        created_at: tutorial.created_at
+    try {
+      const chaptersResponse = await fetch(`http://localhost:8001/tutorials/${tutorial.id}/chapters`);
+      const chapters = await chaptersResponse.json();
+      
+      // Only fetch progress if we have a chat ID
+      if (this.chatId) {
+        try {
+          const progressResponse = await fetch(`http://localhost:8001/progress/${this.chatId}/${tutorial.id}`);
+          const progress = await progressResponse.json();
+          this.completedChapters = progress.completed_chapters;
+        } catch (error) {
+          console.error('Error fetching tutorial progress:', error);
+          this.completedChapters = [];
+        }
       }
-    };
+      
+      this.selectedContext = {
+        id: tutorial.id,
+        title: tutorial.title,
+        content: tutorial.content,
+        chapters: chapters,
+        metadata: {
+          duration: tutorial.estimated_duration,
+          created_at: tutorial.created_at
+        }
+      };
+    } catch (error) {
+      console.error('Error fetching tutorial details:', error);
+    }
   }
 
   startTutorial() {
@@ -608,6 +635,8 @@ export class LearningPanel extends LitElement {
       detail: {
         title: this.selectedContext.title,
         content: this.selectedContext.content,
+        tutorialId: this.selectedContext.id,
+        chapters: this.selectedContext.chapters,
         type: 'tutorial'
       },
       bubbles: true,

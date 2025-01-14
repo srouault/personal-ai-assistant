@@ -315,9 +315,9 @@ export class ChatWindow extends LitElement {
 
   formatContent(message) {
     if (message.role === 'assistant') {
-      console.log('Formatting assistant message:', message);
+      // console.log('Formatting assistant message:', message);
       const content = this.processMessageContent(message.content);
-      console.log('Processed content:', content);
+      // console.log('Processed content:', content);
       const segments = [];
       let currentPosition = 0;
 

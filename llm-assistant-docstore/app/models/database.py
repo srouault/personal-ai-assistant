@@ -3,6 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import os
+from sqlalchemy.sql import func
 
 Base = declarative_base()
 
@@ -41,19 +42,32 @@ class Tutorial(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     learning_path = relationship("LearningPath", back_populates="tutorials")
+    chapters = relationship("TutorialChapter", back_populates="tutorial", order_by="TutorialChapter.order")
+
+class TutorialChapter(Base):
+    __tablename__ = "tutorial_chapters"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tutorial_id = Column(Integer, ForeignKey("tutorials.id"))
+    title = Column(String)
+    content = Column(String)
+    order = Column(Integer)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    tutorial = relationship("Tutorial", back_populates="chapters")
 
 class UserProgress(Base):
     __tablename__ = "user_progress"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String, index=True)  # Could be email or other identifier
+    user_id = Column(String)  # We can use chat_id as user_id for now
     tutorial_id = Column(Integer, ForeignKey("tutorials.id"))
+    chapter_id = Column(Integer, ForeignKey("tutorial_chapters.id"))
     completed = Column(Boolean, default=False)
-    started_at = Column(DateTime)
-    completed_at = Column(DateTime)
-    notes = Column(String)  # User can add personal notes
+    completed_at = Column(DateTime(timezone=True), nullable=True)
     
     tutorial = relationship("Tutorial")
+    chapter = relationship("TutorialChapter")
 
 # Add relationship to LearningPath
 LearningPath.tutorials = relationship("Tutorial", order_by=Tutorial.order, back_populates="learning_path")

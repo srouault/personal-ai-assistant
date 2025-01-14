@@ -56,19 +56,21 @@ When given context about previous conversations:
     
     async def generate_response_stream(self, messages: list[ChatMessage], temperature: float = 0.15, max_tokens: int = 150, context: str = None, prediction_type: str = "New") -> AsyncGenerator[str, None]:
         try:
-            # Select appropriate system prompt based on prediction type
-            system_prompt = self.reference_system_prompt if prediction_type == "Reference" else self.base_system_prompt
+            formatted_messages = []
             
-            # Build the prompt with system message and context
-            formatted_messages = [f"System: {system_prompt}"]
+            # Only add base system prompt if there's no system message in the messages
+            system_prompt = self.reference_system_prompt if prediction_type == "Reference" else self.base_system_prompt
+            formatted_messages.append(f"System: {system_prompt}")
             
             if context:
-                formatted_messages.append(f"\nRelevant Context:\n{context}\n")
+                formatted_messages.append(f"\nContext:\n{context}\n")
             
             # Add conversation history
             for msg in messages:
                 if msg.role == "user":
                     formatted_messages.append(f"User: {msg.content}")
+                elif msg.role == "system":
+                    formatted_messages.append(f"Context: {msg.content}")
                 elif msg.role == "assistant":
                     formatted_messages.append(f"Assistant: {msg.content}")
             
@@ -85,7 +87,7 @@ When given context about previous conversations:
                 repeat_penalty=1.2,
                 presence_penalty=0.1,
                 frequency_penalty=0.1,
-                stop=["User:", "Context:", "System:"],
+                stop=["User:", "System:", "Assistant:"],
                 stream=True
             )
             

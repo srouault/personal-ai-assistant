@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Query, APIRouter
+from fastapi import FastAPI, HTTPException, Depends, Query, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from app.models.chat import ChatRequest, ChatResponse, ChatMessage
@@ -15,6 +15,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from app.services.learning_path_service import LearningPathService
 from app.models.database import SessionLocal
+import httpx
 
 # Configure logging at the top of main.py
 logging.basicConfig(
@@ -229,46 +230,108 @@ and briefly summarize what was discussed. Then proceed to answer the current que
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
 @app.post("/chat/stream")
-async def chat_stream(request: ChatRequest, chat_id: int):
-    if llm_service is None:
-        raise HTTPException(
-            status_code=503,
-            detail="LLM model not loaded. Please check server logs for details."
+async def chat_stream(
+    request: Request,
+    chat_id: int,
+    tutorial_id: Optional[int] = None,
+    chapter_id: Optional[int] = None
+):
+    try:
+        body = await request.json()
+        messages = body.get('messages', [])
+        temperature = body.get('temperature', 0.7)
+        max_tokens = body.get('max_tokens', 2000)
+        
+        # If this is a tutorial chat, fetch the tutorial context
+        tutorial_context = None
+        if tutorial_id and chapter_id:
+            try:
+                # Fetch chapter context
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        f"http://localhost:8001/tutorials/{tutorial_id}/chapters/{chapter_id}/context"
+                    )
+                    if response.status_code == 200:
+                        tutorial_context = response.json()
+                        
+                    # Fetch progress information
+                    progress_response = await client.get(
+                        f"http://localhost:8001/progress/{chat_id}/{tutorial_id}"
+                    )
+                    if progress_response.status_code == 200:
+                        progress = progress_response.json()
+                        tutorial_context['completed_chapters'] = progress.get('completed_chapters', [])
+                        
+            except Exception as e:
+                print(f"Error fetching tutorial context: {e}")
+
+        # Add tutorial context to system message if available
+        if tutorial_context:
+            completed_count = len(tutorial_context.get('completed_chapters', []))
+            is_final_chapter = tutorial_context['order'] == tutorial_context.get('total_chapters', 0)
+            
+            system_message = {
+                "role": "system",
+                "content": f"""You are a helpful teaching assistant guiding the user through a tutorial.
+                Current tutorial: {tutorial_context['tutorial_title']}
+                Current chapter: {tutorial_context['chapter_title']} (Chapter {tutorial_context['order']})
+                Chapter content: {tutorial_context['content']}
+                
+                Instructions for the assistant:
+                1. Guide the user step by step through the chapter content
+                2. Keep track of what steps the user has completed
+                3. Only move to the next step when the user confirms they've completed the current step
+                4. If the user says they've completed a step, acknowledge and move to the next step
+                5. If the user needs help with a step, provide detailed explanations
+                6. Stay focused on the current chapter's content
+                7. When all steps in the chapter are completed, suggest moving to the next chapter
+               
+                """
+            }
+            messages.insert(0, system_message)
+
+        if llm_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="LLM model not loaded. Please check server logs for details."
+            )
+
+        # Get or create chat
+        db_service.get_or_create_chat(
+            chat_id, 
+            default_title=f"New Chat {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        # Store the user's message
+        resp = db_service.add_message(chat_id, "user", messages[-1]['content'])
+        message = resp[0]
+        chat_id = resp[1]
+        interaction_id = resp[2]
+
+        # Create a new list of messages with the updated last message
+        messages.append(ChatMessage(
+            role=messages[-1]['role'],
+            content=messages[-1]['content'],
+            chat_id=chat_id,
+            interaction_id=message.interaction_id
+        ))
+        
+        # Create a new request with the updated messages
+        updated_request = ChatRequest(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens
         )
 
-    # Get or create chat
-    db_service.get_or_create_chat(
-        chat_id, 
-        default_title=f"New Chat {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    )
-    
-    # Store the user's message
-    resp = db_service.add_message(chat_id, "user", request.messages[-1].content)
-    message = resp[0]
-    chat_id = resp[1]
-    interaction_id = resp[2]
-
-    # Create a new list of messages with the updated last message
-    messages = list(request.messages[:-1])  # Convert to list and exclude last message
-    messages.append(ChatMessage(
-        role=request.messages[-1].role,
-        content=request.messages[-1].content,
-        chat_id=chat_id,
-        interaction_id=message.interaction_id  # Use the interaction_id from the stored message
-    ))
-    
-    # Create a new request with the updated messages
-    updated_request = ChatRequest(
-        messages=messages,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens
-    )
-
-    # Return a StreamingResponse
-    return StreamingResponse(
-        generate_stream(updated_request, chat_id),
-        media_type="text/event-stream"
-    )
+        # Return a StreamingResponse
+        return StreamingResponse(
+            generate_stream(updated_request, chat_id),
+            media_type="text/event-stream"
+        )
+    except Exception as e:
+        logger.error(f"Error in chat_stream: {str(e)}")
+        logger.exception("Full traceback:")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/prompt", response_model=PromptResponse)
 async def process_prompt(request: PromptRequest):
