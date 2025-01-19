@@ -246,28 +246,79 @@ export class ChatHistory extends LitElement {
       }
 
       .chat-progress {
-        margin-top: 4px;
-        height: 4px;
-        background-color: #2a2a2a;
-        border-radius: 2px;
+        width: 100%;
+        height: 8px;
+        background-color: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
         overflow: hidden;
+        margin-top: 4px;
+        position: relative;
       }
 
       .progress-bar {
         height: 100%;
-        background-color: #4ade80;
+        background: linear-gradient(90deg, #4ade80 0%, #22c55e 100%);
+        box-shadow: 0 0 10px rgba(74, 222, 128, 0.4);
         transition: width 0.3s ease;
+        border-radius: 4px;
+      }
+
+      .progress-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 50%;
+        background: linear-gradient(
+          to bottom,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        );
       }
 
       .progress-text {
         font-size: 0.75rem;
-        color: #888;
-        margin-top: 2px;
+        color: #4ade80;
+        font-weight: 500;
+        min-width: 60px;
+        text-align: right;
       }
 
       .chat-type.tutorial {
         display: flex;
         flex-direction: column;
+      }
+
+      .tutorial-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 4px;
+      }
+
+      .tutorial-progress-section {
+        display: flex;
+        margin-top: 3px;
+        flex-direction: column;
+        padding: 6px 0;
+        gap: 4px;
+      }
+
+      .progress-stats {
+        display: flex;
+        align-items: center;
+        font-size: 0.75rem;
+        color: #888;
+      }
+
+      .steps-count {
+        color: #888;
+      }
+
+      .percentage {
+        color: #4ade80;
+        font-weight: 500;
       }
     `
   ];
@@ -420,16 +471,6 @@ export class ChatHistory extends LitElement {
                       <path d="M12 16l-9-5v7l9 5 9-5v-7l-9 5z"/>
                     </svg>
                     Tutorial
-                    ${chat.tutorial.progress ? html`
-                      <div class="chat-progress">
-                        <div class="progress-bar" 
-                             style="width: ${chat.tutorial.progress.progress_percentage}%">
-                        </div>
-                      </div>
-                      <div class="progress-text">
-                        ${chat.tutorial.progress.completed_steps}/${chat.tutorial.progress.total_steps} steps
-                      </div>
-                    ` : ''}
                   ` : html`
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
@@ -441,6 +482,20 @@ export class ChatHistory extends LitElement {
                   ${this.formatDate(chat.updated_at)}
                 </div>
               </div>
+
+              ${chat.tutorial?.progress ? html`
+                <div class="tutorial-progress-section">
+                  <div class="progress-stats">
+                    ${chat.tutorial.progress.completed_steps}/${chat.tutorial.progress.total_steps} steps
+                  </div>
+                  <div class="chat-progress">
+                    <div class="progress-bar" 
+                         style="width: ${chat.tutorial.progress.progress_percentage}%">
+                    </div>
+                  </div>
+                </div>
+              ` : ''}
+
               <div class="chat-summary">
                 ${chat.tutorial ? chat.tutorial.title : (chat.summary || 'No summary available')}
               </div>
