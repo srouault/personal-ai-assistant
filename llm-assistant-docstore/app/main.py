@@ -467,3 +467,58 @@ async def delete_user_progress(chat_id: str):
     finally:
         db.close()
 
+@app.get("/progress/{chat_id}")
+async def get_chat_progress(chat_id: str):
+    """Get overall progress for a chat across all tutorials"""
+    db = SessionLocal()
+    logging.info(f"Getting progress for chat_id: {chat_id}")
+    
+    try:
+        # Get the most recent tutorial progress for this chat
+        latest_progress = db.query(UserProgress)\
+            .filter(UserProgress.chat_id == str(chat_id))\
+            .order_by(UserProgress.completed_at.desc())\
+            .first()
+            
+        if not latest_progress:
+            return {
+                "total_steps": 0,
+                "completed_steps": 0,
+                "current_chapter": None,
+                "progress_percentage": 0
+            }
+            
+        # Get total steps for the tutorial
+        total_steps = db.query(func.count(Step.id))\
+            .join(Chapter)\
+            .filter(Chapter.tutorial_id == latest_progress.tutorial_id)\
+            .scalar()
+            
+        # Get completed steps count
+        completed_steps = db.query(func.count(UserProgress.id))\
+            .filter(
+                UserProgress.chat_id == str(chat_id),
+                UserProgress.tutorial_id == latest_progress.tutorial_id,
+                UserProgress.completed == True
+            ).scalar()
+            
+        # Calculate progress percentage
+        progress_percentage = round((completed_steps / total_steps * 100) if total_steps > 0 else 0)
+        
+        return {
+            "total_steps": total_steps,
+            "completed_steps": completed_steps,
+            "current_chapter": latest_progress.chapter_id,
+            "progress_percentage": progress_percentage,
+            "tutorial_id": latest_progress.tutorial_id
+        }
+        
+    except Exception as e:
+        logging.error(f"Error getting progress for chat {chat_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting progress: {str(e)}"
+        )
+    finally:
+        db.close()
+

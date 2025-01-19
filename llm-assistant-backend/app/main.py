@@ -363,27 +363,34 @@ async def delete_chat(chat_id: int):
 @app.get("/chats")
 async def get_chats():
     """Get all chats with their tutorial status"""
-
     try:
         chats = db_service.get_all_chats()
         chat_list = []
         
         async with httpx.AsyncClient() as client:
             for chat in chats:
-                # Check tutorial status from docstore
+                # Check tutorial status and progress from docstore
                 tutorial_info = None
                 try:
-                    response = await client.get(f"http://localhost:8001/tutorial_chat/{chat.id}")
-                    if response.status_code == 200:
-                        tutorial_data = response.json()
-                        if tutorial_data and tutorial_data.get('tutorial_id'):
+                    progress_response = await client.get(f"http://localhost:8001/progress/{chat.id}")
+                    if progress_response.status_code == 200:
+                        progress_data = progress_response.json()
+                        if progress_data.get('tutorial_id'):
                             # Get tutorial details
-                            tutorial_response = await client.get(f"http://localhost:8001/tutorials/{tutorial_data['tutorial_id']}")
+                            tutorial_response = await client.get(
+                                f"http://localhost:8001/tutorials/{progress_data['tutorial_id']}"
+                            )
                             if tutorial_response.status_code == 200:
                                 tutorial = tutorial_response.json()
                                 tutorial_info = {
                                     "id": tutorial['id'],
-                                    "title": tutorial['title']
+                                    "title": tutorial['title'],
+                                    "progress": {
+                                        "total_steps": progress_data['total_steps'],
+                                        "completed_steps": progress_data['completed_steps'],
+                                        "current_chapter": progress_data['current_chapter'],
+                                        "progress_percentage": progress_data['progress_percentage']
+                                    }
                                 }
                 except Exception as e:
                     logger.error(f"Error fetching tutorial info for chat {chat.id}: {str(e)}")
