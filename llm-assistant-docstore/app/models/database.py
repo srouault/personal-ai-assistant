@@ -95,7 +95,7 @@ class UserProgress(Base):
     __tablename__ = "user_progress"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String)  # We can use chat_id as user_id for now
+    chat_id = Column(String)  # We can use chat_id as user_id for now
     tutorial_id = Column(Integer, ForeignKey("tutorials.id"))
     chapter_id = Column(Integer, ForeignKey("chapters.id"))
     step_id = Column(Integer, ForeignKey("steps.id"))

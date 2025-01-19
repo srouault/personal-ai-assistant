@@ -125,7 +125,7 @@ def get_tutorial_progress(chat_id: str, tutorial_id: int):
     try:
         progress = db.query(UserProgress)\
             .filter(
-                UserProgress.user_id == chat_id,
+                UserProgress.chat_id == chat_id,
                 UserProgress.tutorial_id == tutorial_id
             ).all()
         
@@ -141,7 +141,7 @@ def update_chapter_progress(chat_id: str, tutorial_id: int, chapter_id: int):
     db = SessionLocal()
     try:
         progress = UserProgress(
-            user_id=chat_id,
+            chat_id=chat_id,
             tutorial_id=tutorial_id,
             chapter_id=chapter_id,
             completed=True,
@@ -153,10 +153,11 @@ def update_chapter_progress(chat_id: str, tutorial_id: int, chapter_id: int):
     finally:
         db.close()
 
-@app.put("/progress/{chat_id}/step/{step_id}")
+@app.put("/progress/{chat_id}/step/{step_id}/{completed}")
 async def update_step_progress(
     chat_id: str,
-    step_id: int
+    step_id: int,
+    completed: bool
 ):
     """Mark a chapter as completed"""
     db = SessionLocal()
@@ -168,11 +169,11 @@ async def update_step_progress(
         step = db.query(Step).join(Chapter).join(Tutorial).filter(
             Step.id == step_id
         ).first()
-        
+
         if not step:
             logging.error(f"Step {step_id} not found")
             raise HTTPException(
-                status_code=404, 
+                status_code=404,
                 detail=f"Step {step_id} not found"
             )
 
@@ -180,7 +181,7 @@ async def update_step_progress(
 
         # Create or update progress
         progress = db.query(UserProgress).filter(
-            UserProgress.user_id == str(chat_id),
+            UserProgress.chat_id == str(chat_id),
             UserProgress.step_id == step_id
         ).first()
 
@@ -188,11 +189,11 @@ async def update_step_progress(
             logging.info(f"Creating new progress entry for chat_id: {chat_id}, step_id: {step_id}")
             # Create new progress entry
             progress = UserProgress(
-                user_id=str(chat_id),
+                chat_id=str(chat_id),
                 tutorial_id=step.chapter.tutorial_id,
                 chapter_id=step.chapter_id,
                 step_id=step_id,
-                completed=True,
+                completed=completed,
                 completed_at=func.now()
             )
             db.add(progress)
@@ -317,12 +318,12 @@ async def get_chapter_context(
     steps = db.query(Step).filter(
         Step.chapter_id == chapter_id
     ).order_by(Step.order).all()
-    
+
     # Get completed steps if chat_id is provided
     completed_steps = []
     if chat_id:
         completed_steps = db.query(UserProgress.step_id).filter(
-            UserProgress.user_id == chat_id,
+            UserProgress.chat_id == chat_id,
             UserProgress.chapter_id == chapter_id,
             UserProgress.completed == True
         ).all()

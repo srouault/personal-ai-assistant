@@ -366,21 +366,44 @@ class LlmAssistantFrontend extends LitElement {
       const data = await response.json();
       this.selectedChatId = (data.id || 0) + 1;
       console.log('Created new chat with ID:', this.selectedChatId);
+
+      // Initialize progress for the first step
+      const firstChapter = this.currentTutorial.chapters[0];
+      const contextResponse = await fetch(
+        `http://localhost:8001/tutorials/${this.currentTutorial.tutorialId}/chapters/${firstChapter.id}/context?chat_id=${this.selectedChatId}`
+      );
+
+      if (contextResponse.ok) {
+        const chapterContext = await contextResponse.json();
+        if (chapterContext.steps && chapterContext.steps.length > 0) {
+          const firstStep = chapterContext.steps[0];
+          const progressResponse = await fetch(
+            `http://localhost:8001/progress/${this.selectedChatId}/step/1/0`, 
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            }
+          );
+
+          if (!progressResponse.ok) {
+            console.error('Failed to initialize first step progress');
+          }
+        }
+      }
       
       this.messages = [];
       this.isLoading = true;
       this.waitingForFirstToken = true;
 
-      // Add initial user message only
       const userMessage = {
         role: 'user',
         content: "Let's begin the tutorial."
       };
       
-      // Don't add an empty assistant message yet
       this.messages = [userMessage];
 
-      // Send message directly to API
       let chatUrl = `http://localhost:8080/chat/stream?chat_id=${this.selectedChatId}`;
       if (this.currentTutorial) {
         const currentChapter = this.currentTutorial.chapters[this.currentTutorialProgress.currentChapter];
@@ -437,7 +460,7 @@ class LlmAssistantFrontend extends LitElement {
         }
       }
     } catch (error) {
-      console.error('Error creating new chat for tutorial:', error);
+      console.error('Error starting tutorial:', error);
     } finally {
       this.isLoading = false;
       this.waitingForFirstToken = false;
@@ -543,7 +566,7 @@ class LlmAssistantFrontend extends LitElement {
           
           if (currentStep) {
             // Update progress for this step
-            const progressUrl = `http://localhost:8001/progress/${this.selectedChatId}/step/${currentStep.id}`;
+            const progressUrl = `http://localhost:8001/progress/${this.selectedChatId}/step/${currentStep.id}/1`;
             console.log('Updating progress at:', progressUrl);
             
             const progressResponse = await fetch(progressUrl, {
