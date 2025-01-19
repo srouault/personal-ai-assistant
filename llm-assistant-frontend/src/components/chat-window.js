@@ -359,6 +359,19 @@ export class ChatWindow extends LitElement {
     return content;
   }
 
+  formatMessage(content) {
+    if (!content) return [];
+    
+    // Split on ||confirm|| keeping the delimiter
+    const parts = content.split(/(\\|\|confirm\|\|)/);
+    return parts.map(part => {
+        if (part === '||confirm||') {
+            return { type: 'confirm', text: part };
+        }
+        return { type: 'text', text: part };
+    });
+  }
+
   formatContent(message) {
     if (message.role === 'assistant') {
       // console.log('Formatting assistant message:', message);
@@ -558,8 +571,18 @@ export class ChatWindow extends LitElement {
     let showConfirmation = false;
     
     if (isAssistant && content.includes('||confirm||')) {
-      content = content.replace('||confirm||', '');
-      showConfirmation = true && !message.confirmationHandled;
+        content = content.replace('||confirm||', '');
+        // Only show confirmation if:
+        // 1. Message is from assistant
+        // 2. Message is the last one in the conversation
+        // 3. No user response after this message
+        showConfirmation = isAssistant && 
+            message.interaction_id === this.messages[this.messages.length - 1].interaction_id &&
+            !message.confirmationHandled &&
+            !this.messages.some(m => 
+                m.interaction_id > message.interaction_id && 
+                m.role === 'user'
+            );
     }
 
     return html`
