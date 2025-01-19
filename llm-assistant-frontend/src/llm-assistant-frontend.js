@@ -15,7 +15,8 @@ class LlmAssistantFrontend extends LitElement {
     selectedChatId: { type: Number },
     currentTutorial: { type: Object },
     currentTutorialProgress: { type: Object },
-    waitingForChapterConfirmation: { type: Boolean }
+    waitingForChapterConfirmation: { type: Boolean },
+    lastConfirmationResponse: { type: Boolean },
   };
 
   static styles = [
@@ -49,6 +50,7 @@ class LlmAssistantFrontend extends LitElement {
       completedChapters: []
     };
     this.waitingForChapterConfirmation = false;
+    this.lastConfirmationResponse = null;
     console.log('LlmAssistantFrontend initialized');
     this.initializeChat();
   }
@@ -475,6 +477,17 @@ class LlmAssistantFrontend extends LitElement {
     }
   }
 
+  // Add this method to handle the confirmation
+  async handleTutorialStepConfirmation(e) {
+    const { confirmed } = e.detail;
+    this.lastConfirmationResponse = confirmed;
+    
+    // Send the confirmation response to the AI
+    await this.sendMessage({
+      detail: confirmed ? "Yes, I have completed this step." : "No, I need more help with this step."
+    });
+  }
+
   render() {
     return html`
       <div class="app-container">
@@ -496,6 +509,7 @@ class LlmAssistantFrontend extends LitElement {
             @send-message=${this.sendMessage}
             @new-chat=${this.handleNewChat}
             @navigate-to-chat=${this.handleNavigateToChat}
+            @tutorial-step-confirmation=${this.handleTutorialStepConfirmation}
           ></chat-window>
           
           <context-panel></context-panel>

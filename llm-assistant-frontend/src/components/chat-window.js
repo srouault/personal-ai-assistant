@@ -273,6 +273,42 @@ export class ChatWindow extends LitElement {
       .messages-scroll > div.flex + div.flex {
         margin-top: 0.5rem;
       }
+
+      .confirmation-bubble {
+        background: var(--secondary-background);
+        border-radius: 8px;
+        padding: 12px;
+        margin: 8px 0;
+        max-width: 80%;
+        margin-left: auto;
+        text-align: center;
+      }
+
+      .confirmation-buttons {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-top: 8px;
+      }
+
+      .confirm-btn {
+        padding: 6px 16px;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background-color 0.2s;
+      }
+
+      .yes-btn {
+        background-color: var(--primary-color);
+        color: white;
+      }
+
+      .no-btn {
+        background-color: var(--error-color);
+        color: white;
+      }
     `
   ];
 
@@ -493,6 +529,65 @@ export class ChatWindow extends LitElement {
     }
   }
 
+  handleConfirmation(confirmed) {
+    const confirmEvent = new CustomEvent('tutorial-step-confirmation', {
+      detail: { confirmed }
+    });
+    this.dispatchEvent(confirmEvent);
+  }
+
+  renderMessage(message) {
+    const isAssistant = message.role === 'assistant';
+    
+    // Check for confirmation marker in assistant messages
+    let content = message.content;
+    let showConfirmation = false;
+    
+    if (isAssistant && content.includes('||confirm||')) {
+      content = content.replace('||confirm||', '');
+      showConfirmation = true;
+    }
+
+    return html`
+      <div class="flex ${isAssistant ? 'justify-start' : 'justify-end'}"
+           data-interaction-id="${message.interaction_id}">
+        <div class="message-container">
+          <div class="${isAssistant ? 'bg-white text-gray-800' : 'bg-blue-500 text-white'} 
+               message-bubble shadow-sm markdown-body">
+            ${this.formatContent({...message, content})}
+            ${isAssistant && 
+              this.messages.indexOf(message) === this.messages.length - 1 && 
+              this.waitingForFirstToken ? html`
+              <div class="typing-indicator">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+              </div>
+            ` : ''}
+          </div>
+          ${message.timestamp ? html`
+            <div class="message-timestamp">
+              ${this.formatTimestamp(message.timestamp)}
+            </div>
+          ` : ''}
+          ${showConfirmation ? html`
+            <div class="confirmation-bubble">
+              <div>Were you able to completed this step?</div>
+              <div class="confirmation-buttons">
+                <button class="confirm-btn yes-btn" @click=${() => this.handleConfirmation(true)}>
+                  Yes
+                </button>
+                <button class="confirm-btn no-btn" @click=${() => this.handleConfirmation(false)}>
+                  No
+                </button>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }
+
   render() {
     return html`
       <div class="chat-container">
@@ -507,31 +602,7 @@ export class ChatWindow extends LitElement {
         <div class="messages-container bg-gray-100">
           <div class="messages-scroll" @click=${this._handleClick}>
             ${this.messages.map((message, index) => html`
-              <div class="flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}"
-                   data-interaction-id="${message.interaction_id}">
-                <div class="message-container">
-                  <div class="${message.role === 'user' 
-                    ? 'bg-blue-500 text-white' 
-                    : 'bg-white text-gray-800'} 
-                    message-bubble shadow-sm markdown-body">
-                    ${this.formatContent(message)}
-                    ${message.role === 'assistant' && 
-                      index === this.messages.length - 1 && 
-                      this.waitingForFirstToken ? html`
-                      <div class="typing-indicator">
-                        <div class="dot"></div>
-                        <div class="dot"></div>
-                        <div class="dot"></div>
-                      </div>
-                    ` : ''}
-                  </div>
-                  ${message.timestamp ? html`
-                    <div class="message-timestamp">
-                      ${this.formatTimestamp(message.timestamp)}
-                    </div>
-                  ` : ''}
-                </div>
-              </div>
+              ${this.renderMessage(message)}
             `)}
           </div>
         </div>

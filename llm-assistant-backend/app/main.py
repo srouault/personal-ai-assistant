@@ -293,8 +293,8 @@ Instructions for Tutorial Progression:
 2. Break down ONLY the content provided into clear, sequential steps
 3. For each step that exists in the Chapter Content:
    - Explain what needs to be done
-   - Wait for user confirmation or questions
    - Provide help if the user struggles
+   - End your explanation with "||confirm||" to ask for step completion
    - Mark step as complete only when user confirms completion
 4. After each user response:
    - Check if it indicates completion of the current step
@@ -314,7 +314,8 @@ Remember:
 - Keep track of which steps have been completed
 - Be encouraging and supportive
 - Provide detailed explanations when needed
-- Use code examples when relevant
+- Use code examples when relevant- Use code examples when relevant
+- always end the explanation with "||confirm||" to ask for step completion
 
 Begin by introducing the current chapter and its first step from the Chapter Content.
 """
