@@ -374,9 +374,11 @@ export class ChatWindow extends LitElement {
 
   formatContent(message) {
     if (message.role === 'assistant') {
-      // console.log('Formatting assistant message:', message);
-      const content = this.processMessageContent(message.content);
-      // console.log('Processed content:', content);
+      // Remove the "Step X ||confirm||" pattern at the end of messages
+      let content = message.content;
+      content = content.replace(/,?\s*Step \d+ \|\|confirm\|\|/g, '');
+      content = content.replace(/\|\|confirm\|\|/g, '');
+
       const segments = [];
       let currentPosition = 0;
 
