@@ -13,7 +13,6 @@ from .services.db_service import DatabaseService
 from typing import List, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
-from app.services.learning_path_service import LearningPathService
 from app.models.database import SessionLocal, Chat
 import httpx
 

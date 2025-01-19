@@ -414,6 +414,7 @@ class LlmAssistantFrontend extends LitElement {
         const chapterContext = await contextResponse.json();
         if (chapterContext.steps && chapterContext.steps.length > 0) {
           const firstStep = chapterContext.steps[0];
+          this.currentTutorialProgress.currentChapter = firstChapter.id;
           console.log('Initializing first step progress:', {
             chatId: this.selectedChatId,
             tutorialId: this.currentTutorial.tutorialId,
