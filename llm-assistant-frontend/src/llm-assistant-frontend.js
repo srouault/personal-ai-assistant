@@ -17,6 +17,7 @@ class LlmAssistantFrontend extends LitElement {
     currentTutorialProgress: { type: Object },
     waitingForChapterConfirmation: { type: Boolean },
     lastConfirmationResponse: { type: Boolean },
+    currentStepProgress: { type: Object },
   };
 
   static styles = [
@@ -51,6 +52,12 @@ class LlmAssistantFrontend extends LitElement {
     };
     this.waitingForChapterConfirmation = false;
     this.lastConfirmationResponse = null;
+    this.currentStepProgress = {
+      currentStep: 0,
+      completedSteps: [],
+      lastConfirmation: null,
+      totalSteps: 0
+    };
     console.log('LlmAssistantFrontend initialized');
     this.initializeChat();
   }
@@ -209,6 +216,15 @@ class LlmAssistantFrontend extends LitElement {
             }
           }
         }
+
+        // Update total steps when receiving assistant message
+        const newTotalSteps = this.parseStepCount(assistantMessage);
+        if (newTotalSteps > this.currentStepProgress.totalSteps) {
+          this.currentStepProgress = {
+            ...this.currentStepProgress,
+            totalSteps: newTotalSteps
+          };
+        }
       }
 
 
@@ -338,6 +354,12 @@ class LlmAssistantFrontend extends LitElement {
       completedChapters: []
     };
     this.waitingForChapterConfirmation = false;
+    this.currentStepProgress = {
+      currentStep: 0,
+      completedSteps: [],
+      lastConfirmation: null,
+      totalSteps: 0
+    };
     
     try {
       const response = await fetch('http://localhost:8080/chat/latest/id');
@@ -477,15 +499,62 @@ class LlmAssistantFrontend extends LitElement {
     }
   }
 
-  // Add this method to handle the confirmation
+  // Add a method to parse step count from assistant messages
+  parseStepCount(message) {
+    if (message.role === 'assistant') {
+      const stepMatch = message.content.match(/Step (\d+):/g);
+      if (stepMatch) {
+        const steps = stepMatch.map(s => parseInt(s.match(/\d+/)[0]));
+        return Math.max(...steps);
+      }
+    }
+    return this.currentStepProgress.totalSteps;
+  }
+
+  // Update the tutorial step confirmation handler
   async handleTutorialStepConfirmation(e) {
     const { confirmed } = e.detail;
     this.lastConfirmationResponse = confirmed;
     
-    // Send the confirmation response to the AI
-    await this.sendMessage({
-      detail: confirmed ? "Yes, I have completed this step." : "No, I need more help with this step."
-    });
+    if (confirmed) {
+      // Add current step to completed steps if not already included
+      if (!this.currentStepProgress.completedSteps.includes(this.currentStepProgress.currentStep)) {
+        const nextStep = this.currentStepProgress.currentStep + 1;
+        
+        this.currentStepProgress = {
+          ...this.currentStepProgress,
+          completedSteps: [...this.currentStepProgress.completedSteps, this.currentStepProgress.currentStep],
+          currentStep: nextStep,
+          lastConfirmation: true
+        };
+
+        console.log(`Step ${this.currentStepProgress.currentStep} completed. Moving to step ${nextStep}`);
+        console.log('Completed steps:', this.currentStepProgress.completedSteps);
+        
+        // Send confirmation to AI with step information
+        await this.sendMessage({
+          detail: `Yes, I have completed step ${this.currentStepProgress.currentStep}.`
+        });
+
+        // If all steps are completed, trigger chapter completion
+        if (nextStep > this.currentStepProgress.totalSteps) {
+          console.log('All steps completed in this chapter');
+          // You could trigger chapter completion handling here
+        }
+      }
+    } else {
+      // If user says no, don't increment step counter
+      this.currentStepProgress = {
+        ...this.currentStepProgress,
+        lastConfirmation: false
+      };
+      
+      console.log(`User needs more help with step ${this.currentStepProgress.currentStep}`);
+      
+      await this.sendMessage({
+        detail: `No, I need more help with step ${this.currentStepProgress.currentStep}.`
+      });
+    }
   }
 
   render() {

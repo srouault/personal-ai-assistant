@@ -279,9 +279,11 @@ export class ChatWindow extends LitElement {
         border-radius: 8px;
         padding: 12px;
         margin: 8px 0;
-        max-width: 80%;
-        margin-left: auto;
+        max-width: 300px;  /* Set a fixed max-width */
+        margin-left: auto;  /* This pushes it to the right */
+        margin-right: 20px;  /* Add some right margin */
         text-align: center;
+        align-self: flex-end;  /* Align to the end (right) of the container */
       }
 
       .confirmation-buttons {
@@ -298,6 +300,7 @@ export class ChatWindow extends LitElement {
         cursor: pointer;
         font-weight: 500;
         transition: background-color 0.2s;
+        min-width: 60px;  /* Ensure buttons have consistent width */
       }
 
       .yes-btn {
@@ -308,6 +311,13 @@ export class ChatWindow extends LitElement {
       .no-btn {
         background-color: var(--error-color);
         color: white;
+      }
+
+      /* Add this new style to ensure the confirmation bubble container spans full width */
+      .confirmation-container {
+        width: 100%;
+        display: flex;
+        justify-content: flex-end;
       }
     `
   ];
@@ -570,21 +580,23 @@ export class ChatWindow extends LitElement {
               ${this.formatTimestamp(message.timestamp)}
             </div>
           ` : ''}
-          ${showConfirmation ? html`
-            <div class="confirmation-bubble">
-              <div>Were you able to completed this step?</div>
-              <div class="confirmation-buttons">
-                <button class="confirm-btn yes-btn" @click=${() => this.handleConfirmation(true)}>
-                  Yes
-                </button>
-                <button class="confirm-btn no-btn" @click=${() => this.handleConfirmation(false)}>
-                  No
-                </button>
-              </div>
-            </div>
-          ` : ''}
         </div>
       </div>
+      ${showConfirmation ? html`
+        <div class="confirmation-container">
+          <div class="confirmation-bubble">
+            <div>Were you able to complete this step?</div>
+            <div class="confirmation-buttons">
+              <button class="confirm-btn yes-btn" @click=${() => this.handleConfirmation(true)}>
+                Yes
+              </button>
+              <button class="confirm-btn no-btn" @click=${() => this.handleConfirmation(false)}>
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
     `;
   }
 
