@@ -539,11 +539,15 @@ export class ChatWindow extends LitElement {
     }
   }
 
-  handleConfirmation(confirmed) {
-    const confirmEvent = new CustomEvent('tutorial-step-confirmation', {
+  handleConfirmation(message, confirmed) {
+    // Mark the message as handled
+    message.confirmationHandled = true;
+    this.requestUpdate();
+
+    // Dispatch the confirmation event
+    this.dispatchEvent(new CustomEvent('tutorial-step-confirmation', {
       detail: { confirmed }
-    });
-    this.dispatchEvent(confirmEvent);
+    }));
   }
 
   renderMessage(message) {
@@ -555,7 +559,7 @@ export class ChatWindow extends LitElement {
     
     if (isAssistant && content.includes('||confirm||')) {
       content = content.replace('||confirm||', '');
-      showConfirmation = true;
+      showConfirmation = true && !message.confirmationHandled;
     }
 
     return html`
@@ -587,10 +591,10 @@ export class ChatWindow extends LitElement {
           <div class="confirmation-bubble">
             <div>Were you able to complete this step?</div>
             <div class="confirmation-buttons">
-              <button class="confirm-btn yes-btn" @click=${() => this.handleConfirmation(true)}>
+              <button class="confirm-btn yes-btn" @click=${() => this.handleConfirmation(message, true)}>
                 Yes
               </button>
-              <button class="confirm-btn no-btn" @click=${() => this.handleConfirmation(false)}>
+              <button class="confirm-btn no-btn" @click=${() => this.handleConfirmation(message, false)}>
                 No
               </button>
             </div>

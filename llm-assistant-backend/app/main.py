@@ -67,9 +67,7 @@ def get_db():
     finally:
         db.close()
 
-# Add learning path service dependency
-def get_learning_path_service(db: Session = Depends(get_db)):
-    return LearningPathService(db)
+
 
 # Add this with the other dependency functions
 def get_llm_service():
@@ -267,9 +265,6 @@ async def chat_stream(
 
         # Add tutorial context to system message if available
         if tutorial_context:
-            completed_count = len(tutorial_context.get('completed_chapters', []))
-            is_final_chapter = tutorial_context['order'] == tutorial_context.get('total_chapters', 0)
-            
             system_message = {
                 "role": "system",
                 "content": f"""You are a helpful teaching assistant guiding the user through a tutorial.
@@ -277,35 +272,27 @@ async def chat_stream(
 Current Tutorial Context:
 - Tutorial: {tutorial_context['tutorial_title']}
 - Current Chapter: {tutorial_context['chapter_title']} (Chapter {tutorial_context['order']} of {tutorial_context.get('total_chapters', 0)})
-- Completed Chapters: {completed_count}
-- Is Final Chapter: {'Yes' if is_final_chapter else 'No'}
+- Total Steps in Chapter: {len(tutorial_context['steps'])}
 
-Chapter Content:
+Chapter Overview:
 {tutorial_context['content']}
 
-IMPORTANT RULES:
-- You must ONLY teach content that is explicitly present in the Chapter Content above
-- DO NOT invent or add any steps that are not in the Chapter Content
-- When ALL steps from the Chapter Content are completed, you must end the chapter
+Steps to Complete:
+{chr(10).join(f"Step {step['order']}: {step['title']}" for step in tutorial_context['steps'])}
 
-Instructions for Tutorial Progression:
-1. First read and analyze the Chapter Content carefully
-2. Break down ONLY the content provided into clear, sequential steps
-3. For each step that exists in the Chapter Content:
-   - Number each step explicitly (e.g., "Step 1:", "Step 2:", etc.)
-   - Explain what needs to be done
-   - Provide help if the user struggles
-   - End your explanation with "||confirm||" to ask for step completion
+
+Instructions:
+1. Guide the user through the current step
+2. Provide clear explanations and help when needed
+3. End your explanation with "||confirm||" to ask for step completion
+4. When user confirms completion, move to the next step
 
 Remember:
-- NEVER invent or add steps not present in the Chapter Content
-- Stay strictly focused on the provided chapter content
-- Track step numbers explicitly (Step 1, Step 2, etc.)
-- Only advance to next step after user confirms completion
-- If user says "No" to completion, provide more help for current step
+- Stay focused on the current step
+- Provide detailed help when requested
 - Always end step explanations with "||confirm||"
 
-Begin by introducing the current chapter and its first step (Step 1) from the Chapter Content.
+Begin by explaining the current step.
 """
             }
             messages.insert(0, system_message)
@@ -455,48 +442,3 @@ async def get_chat_memories(
         raise HTTPException(status_code=404, detail="No memories found")
     return memories
 
-@app.get("/learning-paths")
-async def get_learning_paths(
-    learning_path_service: LearningPathService = Depends(get_learning_path_service)
-):
-    return learning_path_service.get_learning_paths()
-
-@app.get("/learning-paths/{path_id}")
-async def get_learning_path(
-    path_id: int,
-    learning_path_service: LearningPathService = Depends(get_learning_path_service)
-):
-    path = learning_path_service.get_learning_path(path_id)
-    if not path:
-        raise HTTPException(status_code=404, detail="Learning path not found")
-    return path
-
-@app.get("/learning-paths/{path_id}/tutorials")
-async def get_tutorials(
-    path_id: int,
-    learning_path_service: LearningPathService = Depends(get_learning_path_service)
-):
-    return learning_path_service.get_tutorials_for_path(path_id)
-
-@app.post("/progress/{user_id}/tutorial/{tutorial_id}")
-async def update_progress(
-    user_id: str,
-    tutorial_id: int,
-    completed: bool = False,
-    notes: str = None,
-    learning_path_service: LearningPathService = Depends(get_learning_path_service)
-):
-    return learning_path_service.track_progress(user_id, tutorial_id, completed, notes)
-
-@app.get("/learning-paths/{path_id}/starter-questions")
-async def get_starter_questions(
-    path_id: int,
-    learning_path_service: LearningPathService = Depends(get_learning_path_service),
-    llm_service: LLMService = Depends(get_llm_service)
-):
-    path = learning_path_service.get_learning_path(path_id)
-    if not path:
-        raise HTTPException(status_code=404, detail="Learning path not found")
-    
-    questions = await llm_service.generate_starter_questions(path.__dict__)
-    return {"questions": questions}

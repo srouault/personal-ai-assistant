@@ -1,10 +1,15 @@
-from fastapi import FastAPI, UploadFile, HTTPException
+from fastapi import FastAPI, UploadFile, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.document_service import DocumentService
 from app.models.document import QueryRequest, QueryResponse, Memory, MemoryResponse
-from app.models.database import SessionLocal, LearningPath, Tutorial, TutorialChapter, UserProgress
+from app.models.database import SessionLocal, LearningPath, Tutorial, UserProgress, Step, Chapter
 from sqlalchemy.sql import func
+from sqlalchemy.orm import Session
+from typing import List
+
 import logging
+
+from .services.learning_path_service import LearningPathService
 
 app = FastAPI()
 doc_service = DocumentService()
@@ -25,6 +30,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 @app.get("/learning-paths")
 def get_learning_paths():
@@ -95,9 +101,9 @@ def get_tutorial_chapters(tutorial_id: int):
     """Get chapters for a specific tutorial"""
     db = SessionLocal()
     try:
-        chapters = db.query(TutorialChapter)\
-            .filter(TutorialChapter.tutorial_id == tutorial_id)\
-            .order_by(TutorialChapter.order)\
+        chapters = db.query(Chapter)\
+            .filter(Chapter.tutorial_id == tutorial_id)\
+            .order_by(Chapter.order)\
             .all()
         
         return [
@@ -210,37 +216,54 @@ async def get_document(document_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/tutorials/{tutorial_id}/chapters/{chapter_id}/steps")
+async def get_chapter_steps(
+    tutorial_id: int,
+    chapter_id: int,
+    db: Session = Depends(get_db)
+):
+    steps = db.query(Step).join(Chapter).filter(
+        Chapter.tutorial_id == tutorial_id,
+        Chapter.id == chapter_id
+    ).order_by(Step.order).all()
+    
+    return steps
+
 @app.get("/tutorials/{tutorial_id}/chapters/{chapter_id}/context")
-def get_tutorial_chapter_context(tutorial_id: int, chapter_id: int):
-    """Get the context for a specific tutorial chapter"""
-    db = SessionLocal()
-    try:
-        chapter = db.query(TutorialChapter)\
-            .filter(
-                TutorialChapter.tutorial_id == tutorial_id,
-                TutorialChapter.id == chapter_id
-            ).first()
-        
-        if not chapter:
-            raise HTTPException(status_code=404, detail="Chapter not found")
-            
-        tutorial = db.query(Tutorial)\
-            .filter(Tutorial.id == tutorial_id)\
-            .first()
-            
-        # Get total number of chapters
-        total_chapters = db.query(TutorialChapter)\
-            .filter(TutorialChapter.tutorial_id == tutorial_id)\
-            .count()
-            
-        return {
-            "tutorial_id": tutorial_id,
-            "tutorial_title": tutorial.title,
-            "chapter_id": chapter_id,
-            "chapter_title": chapter.title,
-            "content": chapter.content,
-            "order": chapter.order,
-            "total_chapters": total_chapters
-        }
-    finally:
-        db.close()
+async def get_chapter_context(
+    tutorial_id: int,
+    chapter_id: int,
+    db: Session = Depends(get_db)
+):
+    chapter = db.query(Chapter).filter(
+        Chapter.tutorial_id == tutorial_id,
+        Chapter.id == chapter_id
+    ).first()
+    
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    
+    steps = db.query(Step).filter(
+        Step.chapter_id == chapter_id
+    ).order_by(Step.order).all()
+    
+    return {
+        "tutorial_title": chapter.tutorial.title,
+        "chapter_title": chapter.title,
+        "order": chapter.order,
+        "total_chapters": db.query(Chapter).filter(
+            Chapter.tutorial_id == tutorial_id
+        ).count(),
+        "content": chapter.content,
+        "steps": [
+            {
+                "order": step.order,
+                "title": step.title,
+                "content": step.content,
+                "expected_result": step.expected_result,
+                "validation_type": step.validation_type
+            }
+            for step in steps
+        ]
+    }
+
