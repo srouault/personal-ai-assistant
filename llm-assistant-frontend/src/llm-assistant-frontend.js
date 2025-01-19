@@ -403,8 +403,14 @@ class LlmAssistantFrontend extends LitElement {
         const chapterContext = await contextResponse.json();
         if (chapterContext.steps && chapterContext.steps.length > 0) {
           const firstStep = chapterContext.steps[0];
+          console.log('Initializing first step progress:', {
+            chatId: this.selectedChatId,
+            tutorialId: this.currentTutorial.tutorialId,
+            stepId: firstStep.id
+          });
+          
           const progressResponse = await fetch(
-            `http://localhost:8001/progress/${this.selectedChatId}/step/1/0`, 
+            `http://localhost:8001/progress/${this.selectedChatId}/step/${firstStep.id}/0`, 
             {
               method: 'PUT',
               headers: {
@@ -414,7 +420,7 @@ class LlmAssistantFrontend extends LitElement {
           );
 
           if (!progressResponse.ok) {
-            console.error('Failed to initialize first step progress');
+            console.error('Failed to initialize first step progress:', await progressResponse.text());
           }
         }
       }

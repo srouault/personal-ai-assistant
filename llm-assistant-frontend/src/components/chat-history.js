@@ -244,6 +244,31 @@ export class ChatHistory extends LitElement {
       .confirm-btn:hover {
         background-color: #ff5555;
       }
+
+      .chat-progress {
+        margin-top: 4px;
+        height: 4px;
+        background-color: #2a2a2a;
+        border-radius: 2px;
+        overflow: hidden;
+      }
+
+      .progress-bar {
+        height: 100%;
+        background-color: #4ade80;
+        transition: width 0.3s ease;
+      }
+
+      .progress-text {
+        font-size: 0.75rem;
+        color: #888;
+        margin-top: 2px;
+      }
+
+      .chat-type.tutorial {
+        display: flex;
+        flex-direction: column;
+      }
     `
   ];
 
@@ -317,12 +342,27 @@ export class ChatHistory extends LitElement {
 
   async deleteChat(chatId) {
     try {
+      // Delete chat from backend
       const response = await fetch(`http://localhost:8080/chats/${chatId}`, {
         method: 'DELETE'
       });
+
+      // Delete tutorial progress from docstore
+      const progressResponse = await fetch(`http://localhost:8001/progress/${chatId}`, {
+        method: 'DELETE'
+      });
+
+      if (!progressResponse.ok) {
+        console.error('Failed to delete tutorial progress:', await progressResponse.text());
+      }
+
       if (response.ok) {
-        await this.loadChats();  // Refresh the list
-        if (this.selectedChatId === chatId) {
+        // Remove from local list
+        this.chats = this.chats.filter(chat => chat.id !== chatId);
+        
+        // If deleted chat was selected, clear selection
+        if (chatId === this.selectedChatId) {
+          this.selectedChatId = null;
           this.dispatchEvent(new CustomEvent('chat-selected', { detail: null }));
         }
       } else {
@@ -380,6 +420,16 @@ export class ChatHistory extends LitElement {
                       <path d="M12 16l-9-5v7l9 5 9-5v-7l-9 5z"/>
                     </svg>
                     Tutorial
+                    ${chat.tutorial.progress ? html`
+                      <div class="chat-progress">
+                        <div class="progress-bar" 
+                             style="width: ${chat.tutorial.progress.progress_percentage}%">
+                        </div>
+                      </div>
+                      <div class="progress-text">
+                        ${chat.tutorial.progress.completed_steps}/${chat.tutorial.progress.total_steps} steps
+                      </div>
+                    ` : ''}
                   ` : html`
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>

@@ -159,9 +159,8 @@ async def update_step_progress(
     step_id: int,
     completed: bool
 ):
-    """Mark a chapter as completed"""
-    db = SessionLocal()
     """Update user's progress for a specific step"""
+    db = SessionLocal()
     logging.info(f"Updating progress for chat_id: {chat_id}, step_id: {step_id}")
     
     try:
@@ -177,7 +176,7 @@ async def update_step_progress(
                 detail=f"Step {step_id} not found"
             )
 
-        logging.info(f"Found step: {step.id} in chapter {step.chapter_id}")
+        logging.info(f"Found step: {step.id} in chapter {step.chapter_id}, tutorial {step.chapter.tutorial_id}")
 
         # Create or update progress
         progress = db.query(UserProgress).filter(
@@ -186,11 +185,11 @@ async def update_step_progress(
         ).first()
 
         if not progress:
-            logging.info(f"Creating new progress entry for chat_id: {chat_id}, step_id: {step_id}")
+            logging.info(f"Creating new progress entry for chat_id: {chat_id}, step_id: {step_id}, tutorial_id: {step.chapter.tutorial_id}")
             # Create new progress entry
             progress = UserProgress(
                 chat_id=str(chat_id),
-                tutorial_id=step.chapter.tutorial_id,
+                tutorial_id=step.chapter.tutorial_id,  # Make sure we're getting the actual tutorial ID
                 chapter_id=step.chapter_id,
                 step_id=step_id,
                 completed=completed,
@@ -199,8 +198,7 @@ async def update_step_progress(
             db.add(progress)
         else:
             logging.info(f"Updating existing progress for chat_id: {chat_id}, step_id: {step_id}")
-            # Update existing progress
-            progress.completed = True
+            progress.completed = completed
             progress.completed_at = func.now()
 
         try:
@@ -223,6 +221,8 @@ async def update_step_progress(
             status_code=422,
             detail=f"Error processing request: {str(e)}"
         )
+    finally:
+        db.close()
 
 @app.post("/documents")
 async def upload_document(file: UploadFile):
@@ -353,49 +353,42 @@ async def get_chapter_context(
 
 @app.get("/tutorial_chat/{chat_id}")
 async def get_current_progress(chat_id: int):
-    """Mark a chapter as completed"""
+    """Get tutorial progress for a chat"""
     db = SessionLocal()
-
-    """Get the current tutorial progress for a chat"""
     try:
         # Get the most recent progress entry for this chat
         progress = db.query(UserProgress)\
-            .filter(UserProgress.chat_id == chat_id)\
+            .filter(UserProgress.chat_id == str(chat_id))\
             .order_by(UserProgress.completed_at.desc())\
             .first()
         
         if not progress:
             return {}
             
-        # Get completed chapters
-        completed_chapters = db.query(UserProgress.chapter_id)\
+        # Get total steps for this tutorial
+        total_steps = db.query(func.count(Step.id))\
+            .join(Chapter)\
+            .filter(Chapter.tutorial_id == progress.tutorial_id)\
+            .scalar()
+            
+        # Get completed steps count
+        completed_steps = db.query(func.count(UserProgress.id))\
             .filter(
-                UserProgress.chat_id == chat_id,
+                UserProgress.chat_id == str(chat_id),
                 UserProgress.tutorial_id == progress.tutorial_id,
                 UserProgress.completed == True
-            ).distinct().all()
-        
-        # Get current chapter (based on most recent step)
-        current_chapter = db.query(Step.chapter_id)\
-            .join(UserProgress, UserProgress.step_id == Step.id)\
-            .filter(
-                UserProgress.chat_id == chat_id,
-                UserProgress.tutorial_id == progress.tutorial_id
-            )\
-            .order_by(UserProgress.completed_at.desc())\
-            .first()
+            ).scalar()
 
         return {
             "tutorial_id": progress.tutorial_id,
-            "current_chapter": current_chapter[0] if current_chapter else 0,
-            "completed_chapters": [c[0] for c in completed_chapters]
+            "current_chapter": progress.chapter_id,
+            "total_steps": total_steps,
+            "completed_steps": completed_steps,
+            "progress_percentage": round((completed_steps / total_steps * 100) if total_steps > 0 else 0)
         }
     except Exception as e:
         logging.error(f"Error getting current progress: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error getting current progress: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/tutorials/{tutorial_id}")
 async def get_tutorial(tutorial_id: int):
@@ -439,4 +432,34 @@ async def get_tutorial(tutorial_id: int):
             status_code=500,
             detail=f"Error getting tutorial: {str(e)}"
         )
+
+@app.delete("/progress/{chat_id}")
+async def delete_user_progress(chat_id: str):
+    """Delete all progress entries for a specific chat"""
+    db = SessionLocal()
+    logging.info(f"Deleting progress for chat_id: {chat_id}")
+    
+    try:
+        # Delete all progress entries for this chat
+        result = db.query(UserProgress)\
+            .filter(UserProgress.chat_id == str(chat_id))\
+            .delete(synchronize_session=False)
+            
+        db.commit()
+        
+        logging.info(f"Deleted {result} progress entries for chat_id: {chat_id}")
+        return {
+            "status": "success",
+            "message": f"Deleted {result} progress entries",
+            "deleted_count": result
+        }
+    except Exception as e:
+        db.rollback()
+        logging.error(f"Error deleting progress for chat {chat_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error deleting progress: {str(e)}"
+        )
+    finally:
+        db.close()
 

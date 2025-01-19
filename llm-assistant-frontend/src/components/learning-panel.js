@@ -630,7 +630,7 @@ export class LearningPanel extends LitElement {
   }
 
   startTutorial() {
-    console.log('Starting tutorial:', this.selectedContext.title);
+    console.log('Starting tutorial:', this.selectedContext.title, ' ', this.selectedContext.id);
     const tutorialEvent = new CustomEvent('start-tutorial', {
       detail: {
         title: this.selectedContext.title,
