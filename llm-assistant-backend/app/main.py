@@ -14,7 +14,7 @@ from typing import List, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.services.learning_path_service import LearningPathService
-from app.models.database import SessionLocal
+from app.models.database import SessionLocal, Chat
 import httpx
 
 # Configure logging at the top of main.py
@@ -361,12 +361,46 @@ async def delete_chat(chat_id: int):
     return {"message": "Chat deleted successfully"}
 
 @app.get("/chats")
-async def list_chats():
-    chats = db_service.get_all_chats()
-    return [{"id": chat.id, 
-             "title": chat.title, 
-             "updated_at": chat.updated_at,
-             "summary": chat.summary} for chat in chats]
+async def get_chats():
+    """Get all chats with their tutorial status"""
+
+    try:
+        chats = db_service.get_all_chats()
+        chat_list = []
+        
+        async with httpx.AsyncClient() as client:
+            for chat in chats:
+                # Check tutorial status from docstore
+                tutorial_info = None
+                try:
+                    response = await client.get(f"http://localhost:8001/tutorial_chat/{chat.id}")
+                    if response.status_code == 200:
+                        tutorial_data = response.json()
+                        if tutorial_data and tutorial_data.get('tutorial_id'):
+                            # Get tutorial details
+                            tutorial_response = await client.get(f"http://localhost:8001/tutorials/{tutorial_data['tutorial_id']}")
+                            if tutorial_response.status_code == 200:
+                                tutorial = tutorial_response.json()
+                                tutorial_info = {
+                                    "id": tutorial['id'],
+                                    "title": tutorial['title']
+                                }
+                except Exception as e:
+                    logger.error(f"Error fetching tutorial info for chat {chat.id}: {str(e)}")
+
+                chat_list.append({
+                    "id": chat.id,
+                    "title": chat.title,
+                    "summary": chat.summary,
+                    "created_at": chat.created_at,
+                    "updated_at": chat.updated_at,
+                    "tutorial": tutorial_info
+                })
+            
+        return chat_list
+    except Exception as e:
+        logger.error(f"Error fetching chat list: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/chats/{chat_id}")
 async def get_chat(chat_id: int):

@@ -72,6 +72,8 @@ export class ChatHistory extends LitElement {
         cursor: pointer;
         transition: all 0.2s ease;
         position: relative;
+        display: flex;
+        flex-direction: column;
       }
 
       .chat-item:hover {
@@ -95,6 +97,34 @@ export class ChatHistory extends LitElement {
         height: 70%;
         background-color: #3b82f6;
         border-radius: 2px;
+      }
+
+      .chat-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+
+      .chat-type {
+        display: flex;
+        align-items: center;
+        font-size: 0.75rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background-color: #333;
+        color: #888;
+      }
+
+      .chat-type.tutorial {
+        background-color: #1a472a;
+        color: #4ade80;
+      }
+
+      .chat-type svg {
+        width: 12px;
+        height: 12px;
+        margin-right: 4px;
       }
 
       .chat-date {
@@ -342,11 +372,27 @@ export class ChatHistory extends LitElement {
               >
                 <img src="/assets/trash.png" alt="Delete">
               </button>
-              <div class="chat-date">
-                ${this.formatDate(chat.updated_at)}
+              <div class="chat-header">
+                <div class="chat-type ${chat.tutorial ? 'tutorial' : ''}">
+                  ${chat.tutorial ? html`
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 14l9-5-9-5-9 5 9 5z"/>
+                      <path d="M12 16l-9-5v7l9 5 9-5v-7l-9 5z"/>
+                    </svg>
+                    Tutorial
+                  ` : html`
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+                    </svg>
+                    Chat
+                  `}
+                </div>
+                <div class="chat-date">
+                  ${this.formatDate(chat.updated_at)}
+                </div>
               </div>
               <div class="chat-summary">
-                ${chat.summary || 'No summary available'}
+                ${chat.tutorial ? chat.tutorial.title : (chat.summary || 'No summary available')}
               </div>
             </div>
           `)}
