@@ -239,46 +239,42 @@ async def chat_stream(
         temperature = body.get('temperature', 0.7)
         max_tokens = body.get('max_tokens', 2000)
         
-        # If this is a tutorial chat, fetch the tutorial context
+        # If this is a tutorial chat, fetch the current context
         tutorial_context = None
         if tutorial_id and chapter_id:
             try:
-                # Fetch chapter context
                 async with httpx.AsyncClient() as client:
-                    response = await client.get(
-                        f"http://localhost:8001/tutorials/{tutorial_id}/chapters/{chapter_id}/context"
+                    # Get current context instead of chapter context
+                    context_response = await client.get(
+                        f"http://localhost:8001/current_context/{chat_id}"
                     )
-                    if response.status_code == 200:
-                        tutorial_context = response.json()
-                        
-                    # Fetch progress information
-                    progress_response = await client.get(
-                        f"http://localhost:8001/progress/{chat_id}/{tutorial_id}"
-                    )
-                    if progress_response.status_code == 200:
-                        progress = progress_response.json()
-                        tutorial_context['completed_chapters'] = progress.get('completed_chapters', [])
+                    if context_response.status_code == 200:
+                        tutorial_context = context_response.json()
                         
             except Exception as e:
-                print(f"Error fetching tutorial context: {e}")
+                logger.error(f"Error fetching tutorial context: {e}")
 
         # Add tutorial context to system message if available
         if tutorial_context:
+            current_step = tutorial_context['current_step']
+            chapter = tutorial_context['chapter']
+            tutorial = tutorial_context['tutorial']
+            progress = tutorial_context['progress']
+            
             system_message = {
                 "role": "system",
                 "content": f"""You are a helpful teaching assistant guiding the user through a tutorial.
 
 Current Tutorial Context:
-- Tutorial: {tutorial_context['tutorial_title']}
-- Current Chapter: {tutorial_context['chapter_title']} (Chapter {tutorial_context['order']} of {tutorial_context.get('total_chapters', 0)})
-- Total Steps in Chapter: {len(tutorial_context['steps'])}
+- Tutorial: {tutorial['title']}
+- Chapter: {chapter['title']} (Step {current_step['order']} of {chapter['total_steps']})
+- Current Step: {current_step['title']}
 
-Chapter Overview:
-{tutorial_context['content']}
+Step Content:
+{current_step['content']}
 
-Steps to Complete:
-{chr(10).join(f"Step {step['order']}: {step['title']}" for step in tutorial_context['steps'])}
-
+Progress:
+- Completed {progress['completed_steps']} of {progress['total_steps']} steps ({progress['progress_percentage']}%)
 
 Instructions:
 1. Guide the user through the current step
@@ -314,13 +310,13 @@ Begin by explaining the current step.
         chat_id = resp[1]
         interaction_id = resp[2]
 
-        # Create a new list of messages with the updated last message
-        messages.append(ChatMessage(
-            role=messages[-1]['role'],
-            content=messages[-1]['content'],
-            chat_id=chat_id,
-            interaction_id=message.interaction_id
-        ))
+        # # Create a new list of messages with the updated last message
+        # messages.append(ChatMessage(
+        #     role=messages[-1]['role'],
+        #     content=messages[-1]['content'],
+        #     chat_id=chat_id,
+        #     interaction_id=message.interaction_id
+        # ))
         
         # Create a new request with the updated messages
         updated_request = ChatRequest(

@@ -522,3 +522,103 @@ async def get_chat_progress(chat_id: str):
     finally:
         db.close()
 
+@app.get("/current_context/{chat_id}")
+async def get_current_context(chat_id: str):
+    """Get the current step context for a chat"""
+    db = SessionLocal()
+    logging.info(f"Getting current context for chat_id: {chat_id}")
+    
+    try:
+        # Get the most recent tutorial progress for this chat
+        latest_progress = db.query(UserProgress)\
+            .filter(UserProgress.chat_id == str(chat_id))\
+            .order_by(UserProgress.completed_at.desc())\
+            .first()
+            
+        if not latest_progress:
+            raise HTTPException(
+                status_code=404,
+                detail="No tutorial progress found for this chat"
+            )
+            
+        # Get the current chapter
+        chapter = db.query(Chapter)\
+            .filter(Chapter.id == latest_progress.chapter_id)\
+            .first()
+            
+        if not chapter:
+            raise HTTPException(
+                status_code=404,
+                detail="Chapter not found"
+            )
+            
+        # Get all steps for this chapter
+        steps = db.query(Step)\
+            .filter(Step.chapter_id == chapter.id)\
+            .order_by(Step.order)\
+            .all()
+            
+        # Get completed steps for this chat and chapter
+        completed_steps = db.query(UserProgress)\
+            .filter(
+                UserProgress.chat_id == str(chat_id),
+                UserProgress.chapter_id == chapter.id,
+                UserProgress.completed == True
+            ).all()
+            
+        completed_step_ids = {p.step_id for p in completed_steps}
+        
+        # Find the current (first incomplete) step
+        current_step = next(
+            (step for step in steps if step.id not in completed_step_ids),
+            steps[-1] if steps else None  # Default to last step if all completed
+        )
+        
+        if not current_step:
+            raise HTTPException(
+                status_code=404,
+                detail="No current step found"
+            )
+            
+        # Get the tutorial for context
+        tutorial = db.query(Tutorial)\
+            .filter(Tutorial.id == chapter.tutorial_id)\
+            .first()
+            
+        return {
+            "tutorial": {
+                "id": tutorial.id,
+                "title": tutorial.title,
+                "description": tutorial.description
+            },
+            "chapter": {
+                "id": chapter.id,
+                "title": chapter.title,
+                "content": chapter.content,
+                "order": chapter.order,
+                "total_steps": len(steps)
+            },
+            "current_step": {
+                "id": current_step.id,
+                "title": current_step.title,
+                "content": current_step.content,
+                "order": current_step.order
+            },
+            "progress": {
+                "completed_steps": len(completed_step_ids),
+                "total_steps": len(steps),
+                "progress_percentage": round((len(completed_step_ids) / len(steps) * 100) if steps else 0)
+            }
+        }
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logging.error(f"Error getting current context for chat {chat_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting current context: {str(e)}"
+        )
+    finally:
+        db.close()
+
