@@ -389,6 +389,8 @@ async def get_current_progress(chat_id: int):
     except Exception as e:
         logging.error(f"Error getting current progress: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
 
 @app.get("/tutorials/{tutorial_id}")
 async def get_tutorial(tutorial_id: int):
@@ -432,6 +434,8 @@ async def get_tutorial(tutorial_id: int):
             status_code=500,
             detail=f"Error getting tutorial: {str(e)}"
         )
+    finally:
+        db.close()
 
 @app.delete("/progress/{chat_id}")
 async def delete_user_progress(chat_id: str):

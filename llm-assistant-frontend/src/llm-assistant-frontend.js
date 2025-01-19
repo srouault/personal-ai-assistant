@@ -101,9 +101,7 @@ class LlmAssistantFrontend extends LitElement {
                     interaction_id: interaction.interaction_id,
                     timestamp: interaction.created_at
                 }
-            ].filter(Boolean));  // Remove any undefined messages
-            
-            console.log('Processed messages:', this.messages);
+            ].filter(Boolean));
         }
 
         // Load tutorial progress for this chat
@@ -121,7 +119,20 @@ class LlmAssistantFrontend extends LitElement {
                         currentChapter: progress.current_chapter || 0,
                         completedChapters: progress.completed_chapters || []
                     };
-                    console.log('Loaded tutorial state:', this.currentTutorial, this.currentTutorialProgress);
+                    
+                    // Add step progress state
+                    this.currentStepProgress = {
+                        currentStep: progress.current_step || 0,
+                        completedSteps: progress.completed_steps || [],
+                        totalSteps: progress.total_steps || 0,
+                        lastConfirmation: null
+                    };
+                    
+                    console.log('Loaded tutorial state:', {
+                        tutorial: this.currentTutorial,
+                        progress: this.currentTutorialProgress,
+                        stepProgress: this.currentStepProgress
+                    });
                 }
             }
         }
@@ -197,8 +208,8 @@ class LlmAssistantFrontend extends LitElement {
       // Construct the URL with tutorial context if available
       let chatUrl = `http://localhost:8080/chat/stream?chat_id=${this.selectedChatId}`;
       if (this.currentTutorial) {
-        const currentChapter = this.currentTutorial.chapters[this.currentTutorialProgress.currentChapter];
-        chatUrl += `&tutorial_id=${this.currentTutorial.tutorialId}&chapter_id=${currentChapter.id}`;
+        const currentChapter = this.currentTutorialProgress.currentChapter;
+        chatUrl += `&tutorial_id=${this.currentTutorial.tutorialId}&chapter_id=${currentChapter}`;
       }
 
       const response = await fetch(chatUrl, {
@@ -578,12 +589,12 @@ class LlmAssistantFrontend extends LitElement {
         // Log current tutorial state
         console.log('Current tutorial state:', {
           tutorialId: this.currentTutorial?.tutorialId,
-          chapterId: this.currentTutorial?.chapters[this.currentTutorialProgress.currentChapter]?.id,
+          chapterId: this.currentTutorialProgress.currentChapter,
           chatId: this.selectedChatId
         });
 
         // Get the current chapter context with completed steps
-        const contextUrl = `http://localhost:8001/tutorials/${this.currentTutorial.tutorialId}/chapters/${this.currentTutorial.chapters[this.currentTutorialProgress.currentChapter].id}/context?chat_id=${this.selectedChatId}`;
+        const contextUrl = `http://localhost:8001/tutorials/${this.currentTutorial.tutorialId}/chapters/${this.currentTutorialProgress.currentChapter}/context?chat_id=${this.selectedChatId}`;
         console.log('Fetching context from:', contextUrl);
 
         const response = await fetch(contextUrl);
