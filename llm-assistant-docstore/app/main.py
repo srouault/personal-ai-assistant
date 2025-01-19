@@ -5,7 +5,7 @@ from app.models.document import QueryRequest, QueryResponse, Memory, MemoryRespo
 from app.models.database import SessionLocal, LearningPath, Tutorial, UserProgress, Step, Chapter
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 import logging
 
@@ -153,6 +153,76 @@ def update_chapter_progress(chat_id: str, tutorial_id: int, chapter_id: int):
     finally:
         db.close()
 
+@app.put("/progress/{chat_id}/step/{step_id}")
+async def update_step_progress(
+    chat_id: str,
+    step_id: int
+):
+    """Mark a chapter as completed"""
+    db = SessionLocal()
+    """Update user's progress for a specific step"""
+    logging.info(f"Updating progress for chat_id: {chat_id}, step_id: {step_id}")
+    
+    try:
+        # Get the step to find its chapter and tutorial
+        step = db.query(Step).join(Chapter).join(Tutorial).filter(
+            Step.id == step_id
+        ).first()
+        
+        if not step:
+            logging.error(f"Step {step_id} not found")
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Step {step_id} not found"
+            )
+
+        logging.info(f"Found step: {step.id} in chapter {step.chapter_id}")
+
+        # Create or update progress
+        progress = db.query(UserProgress).filter(
+            UserProgress.user_id == str(chat_id),
+            UserProgress.step_id == step_id
+        ).first()
+
+        if not progress:
+            logging.info(f"Creating new progress entry for chat_id: {chat_id}, step_id: {step_id}")
+            # Create new progress entry
+            progress = UserProgress(
+                user_id=str(chat_id),
+                tutorial_id=step.chapter.tutorial_id,
+                chapter_id=step.chapter_id,
+                step_id=step_id,
+                completed=True,
+                completed_at=func.now()
+            )
+            db.add(progress)
+        else:
+            logging.info(f"Updating existing progress for chat_id: {chat_id}, step_id: {step_id}")
+            # Update existing progress
+            progress.completed = True
+            progress.completed_at = func.now()
+
+        try:
+            db.commit()
+            logging.info("Progress updated successfully")
+            return {"status": "success", "message": "Progress updated"}
+        except Exception as e:
+            db.rollback()
+            logging.error(f"Database error: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error: {str(e)}"
+            )
+            
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logging.error(f"Error processing request: {str(e)}")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Error processing request: {str(e)}"
+        )
+
 @app.post("/documents")
 async def upload_document(file: UploadFile):
     try:
@@ -233,6 +303,7 @@ async def get_chapter_steps(
 async def get_chapter_context(
     tutorial_id: int,
     chapter_id: int,
+    chat_id: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     chapter = db.query(Chapter).filter(
@@ -247,6 +318,16 @@ async def get_chapter_context(
         Step.chapter_id == chapter_id
     ).order_by(Step.order).all()
     
+    # Get completed steps if chat_id is provided
+    completed_steps = []
+    if chat_id:
+        completed_steps = db.query(UserProgress.step_id).filter(
+            UserProgress.user_id == chat_id,
+            UserProgress.chapter_id == chapter_id,
+            UserProgress.completed == True
+        ).all()
+        completed_steps = [s[0] for s in completed_steps]
+    
     return {
         "tutorial_title": chapter.tutorial.title,
         "chapter_title": chapter.title,
@@ -257,11 +338,13 @@ async def get_chapter_context(
         "content": chapter.content,
         "steps": [
             {
+                "id": step.id,
                 "order": step.order,
                 "title": step.title,
                 "content": step.content,
                 "expected_result": step.expected_result,
-                "validation_type": step.validation_type
+                "validation_type": step.validation_type,
+                "completed": step.id in completed_steps
             }
             for step in steps
         ]

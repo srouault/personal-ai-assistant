@@ -516,43 +516,77 @@ class LlmAssistantFrontend extends LitElement {
     const { confirmed } = e.detail;
     this.lastConfirmationResponse = confirmed;
     
-    if (confirmed) {
-      // Add current step to completed steps if not already included
-      if (!this.currentStepProgress.completedSteps.includes(this.currentStepProgress.currentStep)) {
-        const nextStep = this.currentStepProgress.currentStep + 1;
-        
-        this.currentStepProgress = {
-          ...this.currentStepProgress,
-          completedSteps: [...this.currentStepProgress.completedSteps, this.currentStepProgress.currentStep],
-          currentStep: nextStep,
-          lastConfirmation: true
-        };
+    console.log('Tutorial step confirmation:', confirmed);
 
-        console.log(`Step ${this.currentStepProgress.currentStep} completed. Moving to step ${nextStep}`);
-        console.log('Completed steps:', this.currentStepProgress.completedSteps);
-        
-        // Send confirmation to AI with step information
-        await this.sendMessage({
-          detail: `Yes, I have completed step ${this.currentStepProgress.currentStep}.`
+    if (confirmed) {
+      try {
+        // Log current tutorial state
+        console.log('Current tutorial state:', {
+          tutorialId: this.currentTutorial?.tutorialId,
+          chapterId: this.currentTutorial?.chapters[this.currentTutorialProgress.currentChapter]?.id,
+          chatId: this.selectedChatId
         });
 
-        // If all steps are completed, trigger chapter completion
-        if (nextStep > this.currentStepProgress.totalSteps) {
-          console.log('All steps completed in this chapter');
-          // You could trigger chapter completion handling here
+        // Get the current chapter context with completed steps
+        const contextUrl = `http://localhost:8001/tutorials/${this.currentTutorial.tutorialId}/chapters/${this.currentTutorial.chapters[this.currentTutorialProgress.currentChapter].id}/context?chat_id=${this.selectedChatId}`;
+        console.log('Fetching context from:', contextUrl);
+
+        const response = await fetch(contextUrl);
+
+        if (response.ok) {
+          const chapterContext = await response.json();
+          console.log('Chapter context:', chapterContext);
+          
+          // Find the first incomplete step
+          const currentStep = chapterContext.steps.find(step => !step.completed);
+          console.log('Current step to update:', currentStep);
+          
+          if (currentStep) {
+            // Update progress for this step
+            const progressUrl = `http://localhost:8001/progress/${this.selectedChatId}/step/${currentStep.id}`;
+            console.log('Updating progress at:', progressUrl);
+            
+            const progressResponse = await fetch(progressUrl, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            });
+
+            if (!progressResponse.ok) {
+              const errorData = await progressResponse.json();
+              console.error('Failed to update step progress:', {
+                status: progressResponse.status,
+                statusText: progressResponse.statusText,
+                error: errorData
+              });
+            } else {
+              const successData = await progressResponse.json();
+              console.log('Step progress updated successfully:', successData);
+            }
+          } else {
+            console.log('All steps in chapter completed');
+          }
+        } else {
+          const errorText = await response.text();
+          console.error('Failed to fetch chapter context:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText
+          });
         }
+      } catch (error) {
+        console.error('Error updating step progress:', error);
       }
-    } else {
-      // If user says no, don't increment step counter
-      this.currentStepProgress = {
-        ...this.currentStepProgress,
-        lastConfirmation: false
-      };
       
-      console.log(`User needs more help with step ${this.currentStepProgress.currentStep}`);
-      
+      // Send confirmation to AI
       await this.sendMessage({
-        detail: `No, I need more help with step ${this.currentStepProgress.currentStep}.`
+        detail: "Yes, I have completed this step."
+      });
+    } else {
+      // If user says no, just send the message without updating progress
+      await this.sendMessage({
+        detail: "No, I need more help with this step."
       });
     }
   }

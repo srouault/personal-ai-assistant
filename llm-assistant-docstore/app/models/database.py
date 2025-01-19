@@ -98,11 +98,13 @@ class UserProgress(Base):
     user_id = Column(String)  # We can use chat_id as user_id for now
     tutorial_id = Column(Integer, ForeignKey("tutorials.id"))
     chapter_id = Column(Integer, ForeignKey("chapters.id"))
+    step_id = Column(Integer, ForeignKey("steps.id"))
     completed = Column(Boolean, default=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     
     tutorial = relationship("Tutorial")
     chapter = relationship("Chapter")
+    step = relationship("Step")
 
 
 # Create SQLite database engine
