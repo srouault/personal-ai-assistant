@@ -77,30 +77,56 @@ class LlmAssistantFrontend extends LitElement {
     }
   }
 
-  async handleChatSelected(e) {
-    const chatId = e.detail;
+  async handleChatSelected(event) {
+    const chatId = event.detail;
     this.selectedChatId = chatId;
+    console.log('Selected chat:', chatId);
+
     try {
-      const response = await fetch(`http://localhost:8080/chats/${chatId}`);
-      if (response.ok) {
-        const chat = await response.json();
-        console.log('Chat data:', chat);
-        this.messages = chat.interactions.flatMap(interaction => [
-          {
-            ...interaction.messages.find(m => m.role === 'user'),
-            interaction_id: interaction.interaction_id,
-            timestamp: interaction.created_at
-          },
-          {
-            ...interaction.messages.find(m => m.role === 'assistant'),
-            interaction_id: interaction.interaction_id,
-            timestamp: interaction.created_at
-          }
-        ].filter(Boolean));
-        console.log('Processed messages:', this.messages);
-      }
+        // Load chat messages
+        const response = await fetch(`http://localhost:8080/chats/${chatId}`);
+        if (response.ok) {
+            const chat = await response.json();
+            console.log('Chat data:', chat);
+            
+            // Transform interactions into flat messages array
+            this.messages = chat.interactions.flatMap(interaction => [
+                {
+                    ...interaction.messages.find(m => m.role === 'user'),
+                    interaction_id: interaction.interaction_id,
+                    timestamp: interaction.created_at
+                },
+                {
+                    ...interaction.messages.find(m => m.role === 'assistant'),
+                    interaction_id: interaction.interaction_id,
+                    timestamp: interaction.created_at
+                }
+            ].filter(Boolean));  // Remove any undefined messages
+            
+            console.log('Processed messages:', this.messages);
+        }
+
+        // Load tutorial progress for this chat
+        const progressResponse = await fetch(`http://localhost:8001/tutorial_chat/${chatId}`);
+        if (progressResponse.ok) {
+            const progress = await progressResponse.json();
+            if (progress.tutorial_id) {
+                // Load tutorial details
+                const tutorialResponse = await fetch(`http://localhost:8001/tutorials/${progress.tutorial_id}`);
+                if (tutorialResponse.ok) {
+                    const tutorial = await tutorialResponse.json();
+                    this.currentTutorial = tutorial;
+                    this.currentTutorialProgress = {
+                        tutorialId: tutorial.id,
+                        currentChapter: progress.current_chapter || 0,
+                        completedChapters: progress.completed_chapters || []
+                    };
+                    console.log('Loaded tutorial state:', this.currentTutorial, this.currentTutorialProgress);
+                }
+            }
+        }
     } catch (error) {
-      console.error('Error loading chat:', error);
+        console.error('Error loading chat:', error);
     }
   }
 

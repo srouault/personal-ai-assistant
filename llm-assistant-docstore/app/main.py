@@ -351,3 +351,92 @@ async def get_chapter_context(
         ]
     }
 
+@app.get("/tutorial_chat/{chat_id}")
+async def get_current_progress(chat_id: int):
+    """Mark a chapter as completed"""
+    db = SessionLocal()
+
+    """Get the current tutorial progress for a chat"""
+    try:
+        # Get the most recent progress entry for this chat
+        progress = db.query(UserProgress)\
+            .filter(UserProgress.chat_id == chat_id)\
+            .order_by(UserProgress.completed_at.desc())\
+            .first()
+        
+        if not progress:
+            return {}
+            
+        # Get completed chapters
+        completed_chapters = db.query(UserProgress.chapter_id)\
+            .filter(
+                UserProgress.chat_id == chat_id,
+                UserProgress.tutorial_id == progress.tutorial_id,
+                UserProgress.completed == True
+            ).distinct().all()
+        
+        # Get current chapter (based on most recent step)
+        current_chapter = db.query(Step.chapter_id)\
+            .join(UserProgress, UserProgress.step_id == Step.id)\
+            .filter(
+                UserProgress.chat_id == chat_id,
+                UserProgress.tutorial_id == progress.tutorial_id
+            )\
+            .order_by(UserProgress.completed_at.desc())\
+            .first()
+
+        return {
+            "tutorial_id": progress.tutorial_id,
+            "current_chapter": current_chapter[0] if current_chapter else 0,
+            "completed_chapters": [c[0] for c in completed_chapters]
+        }
+    except Exception as e:
+        logging.error(f"Error getting current progress: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting current progress: {str(e)}"
+        )
+
+@app.get("/tutorials/{tutorial_id}")
+async def get_tutorial(tutorial_id: int):
+    """Mark a chapter as completed"""
+    db = SessionLocal()
+
+    """Get full tutorial details including chapters"""
+    try:
+        tutorial = db.query(Tutorial).filter(Tutorial.id == tutorial_id).first()
+        if not tutorial:
+            raise HTTPException(status_code=404, detail="Tutorial not found")
+            
+        chapters = db.query(Chapter)\
+            .filter(Chapter.tutorial_id == tutorial_id)\
+            .order_by(Chapter.order)\
+            .all()
+            
+        return {
+            "id": tutorial.id,
+            "tutorialId": tutorial.id,  # Frontend expects this property
+            "title": tutorial.title,
+            "description": tutorial.description,
+            "content": tutorial.content,
+            "order": tutorial.order,
+            "estimated_duration": tutorial.estimated_duration,
+            "chapters": [
+                {
+                    "id": chapter.id,
+                    "title": chapter.title,
+                    "content": chapter.content,
+                    "order": chapter.order
+                }
+                for chapter in chapters
+            ]
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logging.error(f"Error getting tutorial: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting tutorial: {str(e)}"
+        )
+
