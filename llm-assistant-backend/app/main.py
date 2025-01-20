@@ -96,7 +96,7 @@ async def generate_stream(request: ChatRequest, chat_id: int, tutorial_context: 
         prompt_messages = request.messages[-5:]
 
         #prepend system messages to prompt messages
-        prompt_messages = system_messages + prompt_messages
+        prompt_messages = prompt_messages + system_messages
 
         # Get context based on query type
         context = None
@@ -277,14 +277,30 @@ async def chat_stream(
             chapter = tutorial_context['chapter']
             tutorial = tutorial_context['tutorial']
             progress = tutorial_context['progress']
-            
+
+            context_message = f"""
+                Current Step Context:
+                {current_step['content']}
+                
+                Format of response:
+                
+                Start with some encouraging words
+                then provide the detailed step explanation
+                then always finish with saying this: ||confirm||
+            """
+
+            if progress['progress_percentage'] == 100:
+                context_message = f"""
+                Context: Congratulate on finishing the tutorial
+                """
+
             system_message = {
                 "role": "system",
                 "content": f"""You are a helpful teaching assistant guiding the user through a tutorial.
 
 Current Tutorial Context:
 - Tutorial: {tutorial['title']}
-- Chapter: {chapter['title']} (Step {current_step['order']} of {chapter['total_steps']})
+- Chapter: {chapter['title']} 
 - Current Step: {current_step['title']}
 
 Progress:
@@ -299,15 +315,7 @@ Remember:
 - Stay focused on the current step
 - Provide detailed help when requested
 
-Current Step Context:
-{current_step['content']}
-
-Format of response:
-
-Start with some encouraging words
-then provide the detailed step explanation
-then always finish with saying this: ||confirm||
-
+{context_message}
 """
             }
             messages.insert(0, system_message)

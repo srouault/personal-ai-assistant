@@ -617,7 +617,12 @@ class LlmAssistantFrontend extends LitElement {
                     } else {
                         const successData = await progressResponse.json();
                         console.log('Step progress updated successfully:', successData);
+                        const chatHistoryElement = this.shadowRoot.querySelector('chat-history');
+                        if (chatHistoryElement) {
+                          chatHistoryElement.loadChats();
+                        }
                     }
+
                 } else {
                     console.log('No current step found in context');
                 }
@@ -629,6 +634,8 @@ class LlmAssistantFrontend extends LitElement {
                     error: errorText
                 });
             }
+
+
         } catch (error) {
             console.error('Error updating step progress:', error);
         }
