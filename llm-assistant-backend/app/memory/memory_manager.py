@@ -135,3 +135,36 @@ class MemoryManager:
     async def get_conversation_history(self):
         """Get the full conversation history."""
         return self.conversation_history 
+
+    async def add_tutorial_exchange(
+        self,
+        user_message: str,
+        chat_id: int,
+        interaction_id: int,
+        tutorial_context: dict,
+        db_service=None
+    ) -> None:
+        """
+        Add a lightweight memory record for tutorial interactions.
+        Focuses on tracking step completion and progress.
+        """
+        
+        # Check if user confirmed step completion
+        step_completed = "yes" in user_message.lower() and "completed" in user_message.lower()
+        
+        # Extract step information from assistant message
+        current_step = tutorial_context['current_step']
+        step_info = f"Step {current_step['order']}: {current_step['title']}"
+        
+        # Create a concise memory entry
+        assistant_summary = f"""Assistant explained: {step_info}"""
+        user_summary = f"""'User {'' if step_completed else 'has not '}completed the step."""
+
+        # Store interaction summaries if we have database access
+        if chat_id is not None and db_service is not None and interaction_id is not None:
+            db_service.add_interaction_summary(
+                chat_id,
+                interaction_id,
+                user_summary,
+                assistant_summary
+            )

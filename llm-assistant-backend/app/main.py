@@ -83,7 +83,7 @@ async def health_check():
         "model_loaded": llm_service is not None
     }
 
-async def generate_stream(request: ChatRequest, chat_id: int):
+async def generate_stream(request: ChatRequest, chat_id: int, tutorial_context: dict = None):
     full_response = ""
     context_documents = []  # Store context document info
     try:
@@ -205,22 +205,36 @@ and briefly summarize what was discussed. Then proceed to answer the current que
         # After stream ends, trigger summarization
         logger.info("Stream completed, triggering summarization...")
         # Only store memory if it's not a reference-type query
-
-        task = asyncio.create_task(
-            memory_manager.add_exchange(
-                user_message,
-                full_response,
-                chat_id,
-                interaction_id,
-                db_service,
-                context_documents,
-                prediction,
-                memory_assistant_msg
+        if not tutorial_context:
+            task = asyncio.create_task(
+                    memory_manager.add_exchange(
+                        user_message,
+                        full_response,
+                        chat_id,
+                        interaction_id,
+                        db_service,
+                        context_documents,
+                        prediction,
+                        memory_assistant_msg
+                    )
             )
-        )
-        task.add_done_callback(
-            lambda t: logger.info("Summarization task completed")
-        )
+            task.add_done_callback(
+                lambda t: logger.info("Summarization task completed")
+            )
+        else:
+            task = asyncio.create_task(
+                memory_manager.add_tutorial_exchange(
+                    user_message,
+                    chat_id,
+                    interaction_id,
+                    tutorial_context,
+                    db_service
+                )
+            )
+            task.add_done_callback(
+                lambda t: logger.info("Summarization task completed")
+            )
+
     except Exception as e:
         logger.error(f"Error in generate_stream: {str(e)}")
         logger.exception("Full traceback:")
@@ -270,9 +284,6 @@ Current Tutorial Context:
 - Chapter: {chapter['title']} (Step {current_step['order']} of {chapter['total_steps']})
 - Current Step: {current_step['title']}
 
-Step Content:
-{current_step['content']}
-
 Progress:
 - Completed {progress['completed_steps']} of {progress['total_steps']} steps ({progress['progress_percentage']}%)
 
@@ -285,9 +296,14 @@ Instructions:
 Remember:
 - Stay focused on the current step
 - Provide detailed help when requested
-- Always end step explanations with "||confirm||"
 
-Begin by explaining the current step.
+Current Step Context:
+{current_step['content']}
+
+Format of response:
+
+<< Encouraging words >> << Explanation >> ||confirm||
+
 """
             }
             messages.insert(0, system_message)
@@ -306,18 +322,8 @@ Begin by explaining the current step.
         
         # Store the user's message
         resp = db_service.add_message(chat_id, "user", messages[-1]['content'])
-        message = resp[0]
         chat_id = resp[1]
-        interaction_id = resp[2]
 
-        # # Create a new list of messages with the updated last message
-        # messages.append(ChatMessage(
-        #     role=messages[-1]['role'],
-        #     content=messages[-1]['content'],
-        #     chat_id=chat_id,
-        #     interaction_id=message.interaction_id
-        # ))
-        
         # Create a new request with the updated messages
         updated_request = ChatRequest(
             messages=messages,
@@ -327,7 +333,7 @@ Begin by explaining the current step.
 
         # Return a StreamingResponse
         return StreamingResponse(
-            generate_stream(updated_request, chat_id),
+            generate_stream(updated_request, chat_id, tutorial_context),
             media_type="text/event-stream"
         )
     except Exception as e:
