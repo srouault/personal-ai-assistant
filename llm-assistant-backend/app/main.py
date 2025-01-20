@@ -90,8 +90,13 @@ async def generate_stream(request: ChatRequest, chat_id: int, tutorial_context: 
         last_message = request.messages[-1]
         user_message = last_message.content
 
+        system_messages = [msg for msg in request.messages if msg.role == "system"]
+
         #only use last 5 messages for prompt
         prompt_messages = request.messages[-5:]
+
+        #prepend system messages to prompt messages
+        prompt_messages = system_messages + prompt_messages
 
         # Get context based on query type
         context = None
@@ -243,9 +248,7 @@ and briefly summarize what was discussed. Then proceed to answer the current que
 @app.post("/chat/stream")
 async def chat_stream(
     request: Request,
-    chat_id: int,
-    tutorial_id: Optional[int] = None,
-    chapter_id: Optional[int] = None
+    chat_id: int
 ):
     try:
         body = await request.json()
@@ -255,18 +258,18 @@ async def chat_stream(
         
         # If this is a tutorial chat, fetch the current context
         tutorial_context = None
-        if tutorial_id and chapter_id:
-            try:
-                async with httpx.AsyncClient() as client:
-                    # Get current context instead of chapter context
-                    context_response = await client.get(
-                        f"http://localhost:8001/current_context/{chat_id}"
-                    )
-                    if context_response.status_code == 200:
-                        tutorial_context = context_response.json()
-                        
-            except Exception as e:
-                logger.error(f"Error fetching tutorial context: {e}")
+
+        try:
+            async with httpx.AsyncClient() as client:
+                # Get current context instead of chapter context
+                context_response = await client.get(
+                    f"http://localhost:8001/current_context/{chat_id}"
+                )
+                if context_response.status_code == 200:
+                    tutorial_context = context_response.json()
+
+        except Exception as e:
+            logger.error(f"Error fetching tutorial context: {e}")
 
         # Add tutorial context to system message if available
         if tutorial_context:
@@ -301,7 +304,9 @@ Current Step Context:
 
 Format of response:
 
-<Encouraging words>. <Step Explanation> ||confirm||
+Start with some encouraging words
+then provide the detailed step explanation
+then always finish with saying this: ||confirm||
 
 """
             }

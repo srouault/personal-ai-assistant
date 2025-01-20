@@ -105,13 +105,26 @@ def get_tutorial_chapters(tutorial_id: int):
             .filter(Chapter.tutorial_id == tutorial_id)\
             .order_by(Chapter.order)\
             .all()
+
+        # add steps to chapter
+        for chapter in chapters:
+            steps = db.query(Step).filter(Step.chapter_id == chapter.id).all()
+            chapter.steps = steps
         
         return [
             {
                 "id": chapter.id,
                 "title": chapter.title,
                 "content": chapter.content,
-                "order": chapter.order
+                "order": chapter.order,
+                "steps": [
+                    {
+                        "id": step.id,
+                        "order": step.order,
+                        "title": step.title,
+                    }
+                    for step in chapter.steps
+                ]
             }
             for chapter in chapters
         ]
@@ -633,6 +646,24 @@ async def get_current_context(chat_id: str):
         # Check if chapter was just started
         chapter_just_started = len(completed_step_ids) == 0
             
+        # Calculate total steps in tutorial and total completed steps
+        total_tutorial_steps = 0
+        total_completed_steps = 0
+        
+        for ch in all_chapters:
+            # Get all steps for this chapter
+            ch_steps = db.query(Step).filter(Step.chapter_id == ch.id).all()
+            total_tutorial_steps += len(ch_steps)
+            
+            # Get completed steps for this chapter
+            ch_completed_steps = db.query(UserProgress)\
+                .filter(
+                    UserProgress.chat_id == str(chat_id),
+                    UserProgress.chapter_id == ch.id,
+                    UserProgress.completed == True
+                ).all()
+            total_completed_steps += len(ch_completed_steps)
+        
         return {
             "tutorial": {
                 "id": tutorial.id,
@@ -655,9 +686,9 @@ async def get_current_context(chat_id: str):
                 "order": current_step.order
             },
             "progress": {
-                "completed_steps": len(completed_step_ids),
-                "total_steps": len(steps),
-                "progress_percentage": round((len(completed_step_ids) / len(steps) * 100) if steps else 0)
+                "completed_steps": total_completed_steps,
+                "total_steps": total_tutorial_steps,
+                "progress_percentage": round((total_completed_steps / total_tutorial_steps * 100) if total_tutorial_steps > 0 else 0)
             }
         }
         

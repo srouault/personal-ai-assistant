@@ -207,11 +207,8 @@ class LlmAssistantFrontend extends LitElement {
     try {
       // Construct the URL with tutorial context if available
       let chatUrl = `http://localhost:8080/chat/stream?chat_id=${this.selectedChatId}`;
-      if (this.currentTutorial) {
-        const currentChapter = this.currentTutorialProgress.currentChapter;
-        chatUrl += `&tutorial_id=${this.currentTutorial.tutorialId}&chapter_id=${currentChapter}`;
-      }
 
+    
       const response = await fetch(chatUrl, {
         method: 'POST',
         headers: {
@@ -386,133 +383,131 @@ class LlmAssistantFrontend extends LitElement {
     console.log('Tutorial start event received:', event.detail);
     this.currentTutorial = event.detail;
     this.currentTutorialProgress = {
-      tutorialId: event.detail.tutorialId,
-      currentChapter: 0,
-      completedChapters: []
+        tutorialId: event.detail.tutorialId,
+        currentChapter: 0,
+        completedChapters: []
     };
     this.waitingForChapterConfirmation = false;
     this.currentStepProgress = {
-      currentStep: 0,
-      completedSteps: [],
-      lastConfirmation: null,
-      totalSteps: 0
+        currentStep: event.detail.chapters[0].steps[0].id,
+        completedSteps: [],
+        lastConfirmation: null,
+        totalSteps: 0
     };
     
     try {
-      const response = await fetch('http://localhost:8080/chat/latest/id');
-      const data = await response.json();
-      this.selectedChatId = (data.id || 0) + 1;
-      console.log('Created new chat with ID:', this.selectedChatId);
+        // Get new chat ID
+        const response = await fetch('http://localhost:8080/chat/latest/id');
+        const data = await response.json();
+        this.selectedChatId = (data.id || 0) + 1;
+        console.log('Created new chat with ID:', this.selectedChatId);
 
-      // Initialize progress for the first step
-      const firstChapter = this.currentTutorial.chapters[0];
-      const contextResponse = await fetch(
-        `http://localhost:8001/tutorials/${this.currentTutorial.tutorialId}/chapters/${firstChapter.id}/context?chat_id=${this.selectedChatId}`
-      );
-
-      if (contextResponse.ok) {
-        const chapterContext = await contextResponse.json();
-        if (chapterContext.steps && chapterContext.steps.length > 0) {
-          const firstStep = chapterContext.steps[0];
-          this.currentTutorialProgress.currentChapter = firstChapter.id;
-          console.log('Initializing first step progress:', {
-            chatId: this.selectedChatId,
-            tutorialId: this.currentTutorial.tutorialId,
-            stepId: firstStep.id
-          });
-          
-          const progressResponse = await fetch(
-            `http://localhost:8001/progress/${this.selectedChatId}/step/${firstStep.id}/0`, 
-            {
+        const progressResponse = await fetch(
+          `http://localhost:8001/progress/${this.selectedChatId}/step/${this.currentStepProgress.currentStep}/0`, 
+          {
               method: 'PUT',
               headers: {
-                'Content-Type': 'application/json',
+                  'Content-Type': 'application/json',
               }
-            }
-          );
+          }
+        );
 
-          if (!progressResponse.ok) {
+        if (!progressResponse.ok) {
             console.error('Failed to initialize first step progress:', await progressResponse.text());
-          }
         }
-      }
-      
-      this.messages = [];
-      this.isLoading = true;
-      this.waitingForFirstToken = true;
 
-      const userMessage = {
-        role: 'user',
-        content: "Let's begin the tutorial."
-      };
-      
-      this.messages = [userMessage];
+        let context = null;  // Define context variable in proper scope
 
-      let chatUrl = `http://localhost:8080/chat/stream?chat_id=${this.selectedChatId}`;
-      if (this.currentTutorial) {
-        const currentChapter = this.currentTutorial.chapters[this.currentTutorialProgress.currentChapter];
-        chatUrl += `&tutorial_id=${this.currentTutorial.tutorialId}&chapter_id=${currentChapter.id}`;
-      }
+        // Initialize progress using current_context endpoint
+        const contextResponse = await fetch(
+            `http://localhost:8001/current_context/${this.selectedChatId}`
+        );
 
-      const streamResponse = await fetch(chatUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messages: this.messages,  // Only send the user message
-          temperature: 0.7,
-          max_tokens: 2000
-        })
-      });
-
-      // Create assistant message for streaming response
-      const assistantMessage = {
-        role: 'assistant',
-        content: ''
-      };
-      this.messages = [...this.messages, assistantMessage];
-
-      const reader = streamResponse.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(5));
-              if (data.text) {
-                this.waitingForFirstToken = false;
-                assistantMessage.content += data.text;
-                this.messages = [...this.messages.slice(0, -1), assistantMessage];
-              }
-              if (data.error) {
-                console.error('Error:', data.error);
-              }
-            } catch (e) {
-              console.error('Failed to parse SSE data:', e);
+        if (contextResponse.ok) {
+            context = await contextResponse.json();  // Assign to scoped variable
+            if (context.current_step) {
+                // Initialize progress for the first step
+                console.log('Initializing first step progress:', {
+                    chatId: this.selectedChatId,
+                    tutorialId: context.tutorial.id,
+                    stepId: context.current_step.id
+                });                
             }
-          }
         }
-      }
+        
+        this.messages = [];
+        this.isLoading = true;
+        this.waitingForFirstToken = true;
+
+        const userMessage = {
+            role: 'user',
+            content: "Let's begin the tutorial."
+        };
+        
+        this.messages = [userMessage];
+
+        // Construct chat URL with context information if available
+        let chatUrl = `http://localhost:8080/chat/stream?chat_id=${this.selectedChatId}`;
+
+        const streamResponse = await fetch(chatUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                messages: this.messages,
+                temperature: 0.7,
+                max_tokens: 2000
+            })
+        });
+
+        // Create assistant message for streaming response
+        const assistantMessage = {
+            role: 'assistant',
+            content: ''
+        };
+        this.messages = [...this.messages, assistantMessage];
+
+        const reader = streamResponse.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(5));
+                        if (data.text) {
+                            this.waitingForFirstToken = false;
+                            assistantMessage.content += data.text;
+                            this.messages = [...this.messages.slice(0, -1), assistantMessage];
+                        }
+                        if (data.error) {
+                            console.error('Error:', data.error);
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse SSE data:', e);
+                    }
+                }
+            }
+        }
     } catch (error) {
-      console.error('Error starting tutorial:', error);
+        console.error('Error starting tutorial:', error);
     } finally {
-      this.isLoading = false;
-      this.waitingForFirstToken = false;
-      // Refresh chat list
-      const chatHistoryElement = this.shadowRoot.querySelector('chat-history');
-      if (chatHistoryElement) {
-        chatHistoryElement.loadChats();
-      }
+        this.isLoading = false;
+        this.waitingForFirstToken = false;
+        // Refresh chat list
+        const chatHistoryElement = this.shadowRoot.querySelector('chat-history');
+        if (chatHistoryElement) {
+            chatHistoryElement.loadChats();
+        }
     }
   }
 
@@ -586,75 +581,67 @@ class LlmAssistantFrontend extends LitElement {
     console.log('Tutorial step confirmation:', confirmed);
 
     if (confirmed) {
-      try {
-        // Log current tutorial state
-        console.log('Current tutorial state:', {
-          tutorialId: this.currentTutorial?.tutorialId,
-          chapterId: this.currentTutorialProgress.currentChapter,
-          chatId: this.selectedChatId
-        });
+        try {
+            // Get current context instead of chapter context
+            const contextUrl = `http://localhost:8001/current_context/${this.selectedChatId}`;
+            console.log('Fetching current context from:', contextUrl);
 
-        // Get the current chapter context with completed steps
-        const contextUrl = `http://localhost:8001/tutorials/${this.currentTutorial.tutorialId}/chapters/${this.currentTutorialProgress.currentChapter}/context?chat_id=${this.selectedChatId}`;
-        console.log('Fetching context from:', contextUrl);
+            const response = await fetch(contextUrl);
 
-        const response = await fetch(contextUrl);
+            if (response.ok) {
+                const context = await response.json();
+                console.log('Current context:', context);
+                
+                const currentStep = context.current_step;
+                console.log('Current step to update:', currentStep);
+                
+                if (currentStep) {
+                    // Update progress for this step
+                    const progressUrl = `http://localhost:8001/progress/${this.selectedChatId}/step/${currentStep.id}/1`;
+                    console.log('Updating progress at:', progressUrl);
+                    
+                    const progressResponse = await fetch(progressUrl, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
 
-        if (response.ok) {
-          const chapterContext = await response.json();
-          console.log('Chapter context:', chapterContext);
-          
-          // Find the first incomplete step
-          const currentStep = chapterContext.steps.find(step => !step.completed);
-          console.log('Current step to update:', currentStep);
-          
-          if (currentStep) {
-            // Update progress for this step
-            const progressUrl = `http://localhost:8001/progress/${this.selectedChatId}/step/${currentStep.id}/1`;
-            console.log('Updating progress at:', progressUrl);
-            
-            const progressResponse = await fetch(progressUrl, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-              }
-            });
-
-            if (!progressResponse.ok) {
-              const errorData = await progressResponse.json();
-              console.error('Failed to update step progress:', {
-                status: progressResponse.status,
-                statusText: progressResponse.statusText,
-                error: errorData
-              });
+                    if (!progressResponse.ok) {
+                        const errorData = await progressResponse.json();
+                        console.error('Failed to update step progress:', {
+                            status: progressResponse.status,
+                            statusText: progressResponse.statusText,
+                            error: errorData
+                        });
+                    } else {
+                        const successData = await progressResponse.json();
+                        console.log('Step progress updated successfully:', successData);
+                    }
+                } else {
+                    console.log('No current step found in context');
+                }
             } else {
-              const successData = await progressResponse.json();
-              console.log('Step progress updated successfully:', successData);
+                const errorText = await response.text();
+                console.error('Failed to fetch current context:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: errorText
+                });
             }
-          } else {
-            console.log('All steps in chapter completed');
-          }
-        } else {
-          const errorText = await response.text();
-          console.error('Failed to fetch chapter context:', {
-            status: response.status,
-            statusText: response.statusText,
-            error: errorText
-          });
+        } catch (error) {
+            console.error('Error updating step progress:', error);
         }
-      } catch (error) {
-        console.error('Error updating step progress:', error);
-      }
-      
-      // Send confirmation to AI
-      await this.sendMessage({
-        detail: "Yes, I have completed this step."
-      });
+        
+        // Send confirmation to AI
+        await this.sendMessage({
+            detail: "Yes, I have completed this step."
+        });
     } else {
-      // If user says no, just send the message without updating progress
-      await this.sendMessage({
-        detail: "No, I need more help with this step."
-      });
+        // If user says no, just send the message without updating progress
+        await this.sendMessage({
+            detail: "No, I need more help with this step."
+        });
     }
   }
 
