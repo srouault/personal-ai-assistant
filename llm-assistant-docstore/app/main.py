@@ -568,6 +568,42 @@ async def get_current_context(chat_id: str):
             
         completed_step_ids = {p.step_id for p in completed_steps}
         
+        # Check if all steps in current chapter are completed
+        all_chapter_steps_completed = len(completed_step_ids) == len(steps)
+        
+        # Get the tutorial for context
+        tutorial = db.query(Tutorial)\
+            .filter(Tutorial.id == chapter.tutorial_id)\
+            .first()
+            
+        # Get all chapters for this tutorial
+        all_chapters = db.query(Chapter)\
+            .filter(Chapter.tutorial_id == tutorial.id)\
+            .order_by(Chapter.order)\
+            .all()
+            
+        # If all steps in current chapter are completed, try to move to next chapter
+        if all_chapter_steps_completed:
+            next_chapter = None
+            for i, ch in enumerate(all_chapters):
+                if ch.id == chapter.id and i < len(all_chapters) - 1:
+                    next_chapter = all_chapters[i + 1]
+                    break
+                    
+            if next_chapter:
+                chapter = next_chapter
+                steps = db.query(Step)\
+                    .filter(Step.chapter_id == chapter.id)\
+                    .order_by(Step.order)\
+                    .all()
+                completed_steps = db.query(UserProgress)\
+                    .filter(
+                        UserProgress.chat_id == str(chat_id),
+                        UserProgress.chapter_id == chapter.id,
+                        UserProgress.completed == True
+                    ).all()
+                completed_step_ids = {p.step_id for p in completed_steps}
+        
         # Find the current (first incomplete) step
         current_step = next(
             (step for step in steps if step.id not in completed_step_ids),
@@ -580,23 +616,37 @@ async def get_current_context(chat_id: str):
                 detail="No current step found"
             )
             
-        # Get the tutorial for context
-        tutorial = db.query(Tutorial)\
-            .filter(Tutorial.id == chapter.tutorial_id)\
-            .first()
+        # Check if tutorial is completed
+        all_chapters_completed = True
+        for ch in all_chapters:
+            ch_steps = db.query(Step).filter(Step.chapter_id == ch.id).all()
+            ch_completed_steps = db.query(UserProgress)\
+                .filter(
+                    UserProgress.chat_id == str(chat_id),
+                    UserProgress.chapter_id == ch.id,
+                    UserProgress.completed == True
+                ).all()
+            if len(ch_completed_steps) < len(ch_steps):
+                all_chapters_completed = False
+                break
+                
+        # Check if chapter was just started
+        chapter_just_started = len(completed_step_ids) == 0
             
         return {
             "tutorial": {
                 "id": tutorial.id,
                 "title": tutorial.title,
-                "description": tutorial.description
+                "description": tutorial.description,
+                "completed": all_chapters_completed
             },
             "chapter": {
                 "id": chapter.id,
                 "title": chapter.title,
                 "content": chapter.content,
                 "order": chapter.order,
-                "total_steps": len(steps)
+                "total_steps": len(steps),
+                "just_started": chapter_just_started
             },
             "current_step": {
                 "id": current_step.id,

@@ -290,8 +290,7 @@ Progress:
 Instructions:
 1. Guide the user through the current step
 2. Provide clear explanations and help when needed
-3. End your explanation with "||confirm||" to ask for step completion
-4. When user confirms completion, move to the next step
+3. Take the explanation from the Step Context 
 
 Remember:
 - Stay focused on the current step
@@ -302,7 +301,7 @@ Current Step Context:
 
 Format of response:
 
-<< Encouraging words >> << Explanation >> ||confirm||
+<Encouraging words>. <Step Explanation> ||confirm||
 
 """
             }
