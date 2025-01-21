@@ -598,10 +598,17 @@ export class ChatHistory extends LitElement {
 
                 ${this.expandedChats[chat.id] ? html`
                   <div class="tutorial-details">
-                    ${chat.tutorial.chapters.map(chapter => {
+                    ${chat.tutorial.chapters.map((chapter, chapterIndex) => {
                       const chapterSteps = chapter.steps || [];
+                      
+                      // Calculate total steps completed before this chapter
+                      const previousChaptersSteps = chat.tutorial.chapters
+                        .slice(0, chapterIndex)
+                        .reduce((total, ch) => total + (ch.steps?.length || 0), 0);
+                      
+                      // Calculate completed steps for this chapter
                       const completedSteps = chapterSteps.filter(step => 
-                        chat.tutorial.progress.completed_steps >= step.order
+                        (step.order + previousChaptersSteps) <= chat.tutorial.progress.completed_steps
                       ).length;
                       
                       return html`
@@ -614,7 +621,8 @@ export class ChatHistory extends LitElement {
                           </div>
                           <div class="step-list">
                             ${chapter.steps.map(step => {
-                              const isCompleted = chat.tutorial.progress.completed_steps >= step.order;
+                              const stepGlobalPosition = step.order + previousChaptersSteps;
+                              const isCompleted = stepGlobalPosition <= chat.tutorial.progress.completed_steps;
                               return html`
                                 <div class="step-item ${isCompleted ? 'completed' : ''}">
                                   ${isCompleted ? html`
