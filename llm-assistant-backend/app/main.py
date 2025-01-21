@@ -394,17 +394,23 @@ async def get_chats():
                                 f"http://localhost:8001/tutorials/{progress_data['tutorial_id']}"
                             )
                             if tutorial_response.status_code == 200:
-                                tutorial = tutorial_response.json()
-                                tutorial_info = {
-                                    "id": tutorial['id'],
-                                    "title": tutorial['title'],
-                                    "progress": {
-                                        "total_steps": progress_data['total_steps'],
-                                        "completed_steps": progress_data['completed_steps'],
-                                        "current_chapter": progress_data['current_chapter'],
-                                        "progress_percentage": progress_data['progress_percentage']
+                                chapters_response = await client.get(
+                                    f"http://localhost:8001/tutorials/{progress_data['tutorial_id']}/chapters"
+                                )
+                                if chapters_response.status_code == 200:
+                                    chapters = chapters_response.json()
+                                    tutorial = tutorial_response.json()
+                                    tutorial_info = {
+                                        "id": tutorial['id'],
+                                        "title": tutorial['title'],
+                                        "chapters": chapters,
+                                        "progress": {
+                                            "total_steps": progress_data['total_steps'],
+                                            "completed_steps": progress_data['completed_steps'],
+                                            "current_chapter": progress_data['current_chapter'],
+                                            "progress_percentage": progress_data['progress_percentage']
+                                        }
                                     }
-                                }
                 except Exception as e:
                     logger.error(f"Error fetching tutorial info for chat {chat.id}: {str(e)}")
 

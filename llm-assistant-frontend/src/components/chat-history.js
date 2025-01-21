@@ -7,7 +7,8 @@ export class ChatHistory extends LitElement {
     selectedChatId: { type: Number },
     loading: { type: Boolean },
     showDeleteModal: { type: Boolean },
-    chatToDelete: { type: Number }
+    chatToDelete: { type: Number },
+    expandedChats: { type: Object }
   };
 
   static styles = [
@@ -320,6 +321,81 @@ export class ChatHistory extends LitElement {
         color: #4ade80;
         font-weight: 500;
       }
+
+      .tutorial-details {
+        margin-top: 8px;
+        padding-left: 8px;
+        border-left: 2px solid #3b82f6;
+      }
+
+      .expand-button {
+        background: none;
+        border: none;
+        color: #4ade80;
+        cursor: pointer;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.75rem;
+        margin-top: 4px;
+      }
+
+      .expand-button:hover {
+        color: #22c55e;
+      }
+
+      .expand-icon {
+        transition: transform 0.2s ease;
+      }
+
+      .expand-icon.expanded {
+        transform: rotate(90deg);
+      }
+
+      .chapter-item {
+        margin: 8px 0;
+        font-size: 0.875rem;
+        color: #e2e2e2;
+      }
+
+      .chapter-title {
+        font-weight: 500;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .step-list {
+        padding-left: 16px;
+        margin: 4px 0;
+      }
+
+      .step-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #888;
+        font-size: 0.75rem;
+        margin: 4px 0;
+      }
+
+      .step-item.completed {
+        color: #4ade80;
+      }
+
+      .checkmark {
+        width: 14px;
+        height: 14px;
+        color: #4ade80;
+      }
+
+      .chapter-progress {
+        font-size: 0.75rem;
+        color: #888;
+        margin-left: auto;
+      }
     `
   ];
 
@@ -330,6 +406,7 @@ export class ChatHistory extends LitElement {
     this.loading = false;
     this.showDeleteModal = false;
     this.chatToDelete = null;
+    this.expandedChats = {};
     this.loadChats();
   }
 
@@ -443,6 +520,14 @@ export class ChatHistory extends LitElement {
     this.chatToDelete = null;
   }
 
+  toggleExpand(e, chatId) {
+    e.stopPropagation();
+    this.expandedChats = {
+      ...this.expandedChats,
+      [chatId]: !this.expandedChats[chatId]
+    };
+  }
+
   render() {
     return html`
       <div class="text-center">
@@ -483,6 +568,10 @@ export class ChatHistory extends LitElement {
                 </div>
               </div>
 
+              <div class="chat-summary">
+                ${chat.tutorial ? chat.tutorial.title : (chat.summary || 'No summary available')}
+              </div>
+
               ${chat.tutorial?.progress ? html`
                 <div class="tutorial-progress-section">
                   <div class="progress-stats">
@@ -493,12 +582,61 @@ export class ChatHistory extends LitElement {
                          style="width: ${chat.tutorial.progress.progress_percentage}%">
                     </div>
                   </div>
+                  <button class="expand-button" @click=${(e) => this.toggleExpand(e, chat.id)}>
+                    <svg 
+                      class="expand-icon ${this.expandedChats[chat.id] ? 'expanded' : ''}"
+                      width="12" 
+                      height="12" 
+                      viewBox="0 0 24 24" 
+                      fill="currentColor"
+                    >
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                    ${this.expandedChats[chat.id] ? 'Hide Details' : 'Show Details'}
+                  </button>
                 </div>
-              ` : ''}
 
-              <div class="chat-summary">
-                ${chat.tutorial ? chat.tutorial.title : (chat.summary || 'No summary available')}
-              </div>
+                ${this.expandedChats[chat.id] ? html`
+                  <div class="tutorial-details">
+                    ${chat.tutorial.chapters.map(chapter => {
+                      const chapterSteps = chapter.steps || [];
+                      const completedSteps = chapterSteps.filter(step => 
+                        chat.tutorial.progress.completed_steps >= step.order
+                      ).length;
+                      
+                      return html`
+                        <div class="chapter-item">
+                          <div class="chapter-title">
+                            ${chapter.title}
+                            <span class="chapter-progress">
+                              ${completedSteps}/${chapterSteps.length}
+                            </span>
+                          </div>
+                          <div class="step-list">
+                            ${chapter.steps.map(step => {
+                              const isCompleted = chat.tutorial.progress.completed_steps >= step.order;
+                              return html`
+                                <div class="step-item ${isCompleted ? 'completed' : ''}">
+                                  ${isCompleted ? html`
+                                    <svg class="checkmark" viewBox="0 0 24 24">
+                                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                    </svg>
+                                  ` : html`
+                                    <svg class="checkmark" viewBox="0 0 24 24" style="opacity: 0.3">
+                                      <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+                                    </svg>
+                                  `}
+                                  ${step.title}
+                                </div>
+                              `;
+                            })}
+                          </div>
+                        </div>
+                      `;
+                    })}
+                  </div>
+                ` : ''}
+              ` : ''}
             </div>
           `)}
       </div>
