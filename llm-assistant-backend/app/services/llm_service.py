@@ -7,14 +7,17 @@ import logging
 import aiohttp
 import joblib
 import json
+from app.services.llm_providers import LocalLLMProvider, OpenAIProvider, ClaudeProvider
 
 class LLMService:
     def __init__(self, docstore_url: str = "http://localhost:8001", db_service=None):
         self.docstore_url = docstore_url
         self.db_service = db_service
-        model_path = os.getenv("MODEL_PATH")
         self.classifier_model = joblib.load("app/models/prompt_classifier.joblib")
 
+        # Initialize LLM provider based on configuration
+        provider_type = os.getenv("LLM_PROVIDER", "local").lower()
+        
         # Define base system prompt
         self.base_system_prompt = """You are a helpful AI assistant with access to previous conversation history. 
 
@@ -34,68 +37,51 @@ When given context about previous conversations:
 4. End your response with: 'If you want to go back to our chat click here: <<<chat_history>>>CHAT_ID,INTERACTION_ID<<<chat_history>>>'
    (Replace CHAT_ID and INTERACTION_ID with the actual values from the memory)"""
 
-        if not Path(model_path).exists():
-            raise FileNotFoundError(
-                f"Model file not found at {model_path}. "
-                "Please download a GGUF format model and place it in the models directory, "
-                "or set the MODEL_PATH environment variable to point to your model file."
-            )
+        # Initialize the appropriate provider
+        if provider_type == "local":
+            model_path = os.getenv("MODEL_PATH")
+            if not model_path:
+                raise ValueError("MODEL_PATH environment variable is required when using local provider")
+            if not Path(model_path).exists():
+                raise FileNotFoundError(
+                    f"Model file not found at {model_path}. "
+                    "Please download a GGUF format model and place it in the models directory, "
+                    "or set the MODEL_PATH environment variable to point to your model file."
+                )
+            self.llm_provider = LocalLLMProvider(model_path)
+        elif provider_type == "openai":
+            api_key = os.getenv("OPENAI_API_KEY")
+            model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY environment variable is required when using OpenAI provider")
+            self.llm_provider = OpenAIProvider(api_key, model)
+        elif provider_type == "claude":
+            api_key = os.getenv("ANTHROPIC_API_KEY")
+            model = os.getenv("CLAUDE_MODEL", "claude-3-sonnet-20240229")
+            if not api_key:
+                raise ValueError("ANTHROPIC_API_KEY environment variable is required when using Claude provider")
+            self.llm_provider = ClaudeProvider(api_key, model)
+        else:
+            raise ValueError(f"Unsupported LLM provider: {provider_type}")
         
         logging.getLogger('llama_cpp').setLevel(logging.ERROR)
-        
-        try:
-            self.llm = Llama(
-                model_path=model_path,
-                n_gpu_layers=32,
-                verbose=False,
-                n_ctx=32000
-            )
-        except Exception as e:
-            logging.error(f"Error loading model: {str(e)}")
-            raise
     
     async def generate_response_stream(self, messages: list[ChatMessage], temperature: float = 0.15, max_tokens: int = 150, context: str = None, prediction_type: str = "New") -> AsyncGenerator[str, None]:
         try:
             formatted_messages = []
             
-            # Only add base system prompt if there's no system message in the messages
+            # Add system prompt
             system_prompt = self.reference_system_prompt if prediction_type == "Reference" else self.base_system_prompt
-            formatted_messages.append(f"System: {system_prompt}")
+            formatted_messages.append(ChatMessage(role="system", content=system_prompt))
             
             if context:
-                formatted_messages.append(f"\nContext:\n{context}\n")
+                formatted_messages.append(ChatMessage(role="system", content=f"Context:\n{context}"))
             
             # Add conversation history
-            for msg in messages:
-                if msg.role == "user":
-                    formatted_messages.append(f"User: {msg.content}")
-                elif msg.role == "system":
-                    formatted_messages.append(f"Context: {msg.content}")
-                elif msg.role == "assistant":
-                    formatted_messages.append(f"Assistant: {msg.content}")
+            formatted_messages.extend(messages)
             
-            prompt = "\n".join(formatted_messages)
-            prompt += "\nAssistant:"
-
-            # Generate streaming response
-            stream = self.llm(
-                prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=0.76,
-                top_k=10,
-                repeat_penalty=1.2,
-                presence_penalty=0.1,
-                frequency_penalty=0.1,
-                stop=["User:", "System:", "Assistant:"],
-                stream=True
-            )
-            
-            for output in stream:
-                if output and 'choices' in output and len(output['choices']) > 0:
-                    text = output['choices'][0]['text']
-                    if text:
-                        yield text
+            async for text in self.llm_provider.generate_stream(formatted_messages, temperature, max_tokens):
+                yield text
 
         except Exception as e:
             logging.error(f"Error in generate_response_stream: {str(e)}")

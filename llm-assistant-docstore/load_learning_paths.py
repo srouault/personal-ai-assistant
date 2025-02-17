@@ -347,6 +347,184 @@ def load_sample_data():
                 )
                 db.add(step)
     
+    # After the Git tutorials section, before the final commit, add:
+    
+    unity_vr_path = LearningPath(
+        title="Unity VR Development for Meta Quest 3",
+        description="Learn to create immersive VR experiences using Unity for the Meta Quest 3 platform",
+        category="Game Development",
+        path_metadata={"difficulty": "intermediate", "prerequisites": ["Basic C# programming", "Unity basics"]}
+    )
+    db.add(unity_vr_path)
+    db.flush()
+
+  unity_vr_tutorials = [
+        {
+            "title": "Setting Up Unity for Quest Development",
+            "description": "Configure Unity and required tools for Meta Quest 3 development using the latest Meta All-Inclusive SDK",
+            "content": "Essential setup for Quest development environment",
+            "order": 1,
+            "estimated_duration": 60,
+            "chapters": [
+                {
+                    "title": "Development Environment Setup",
+                    "content": "Installing and configuring necessary tools",
+                    "order": 1,
+                    "steps": [
+                        {
+                            "order": 1,
+                            "title": "Install Unity Hub and Unity Editor",
+                            "content": "Download and install Unity Hub, then install Unity Editor 2022.3 LTS or later with Android Build Support modules.",
+                            "expected_result": "Unity installed with Android build support",
+                            "validation_type": "manual"
+                        },
+                        {
+                            "order": 2,
+                            "title": "Install Meta All-Inclusive SDK",
+                            "content": "Download and install the latest Meta All-Inclusive SDK from the Unity Asset Store or GitHub. This package includes all necessary tools like XR Plugin Management, Input System integration, and Oculus-specific features.",
+                            "expected_result": "Meta All-Inclusive SDK installed and ready",
+                            "validation_type": "manual"
+                        },
+                        {
+                            "order": 3,
+                            "title": "Configure Developer Account and Device",
+                            "content": "Create a Meta Developer Account, set up your Quest device in developer mode, and link the device to your account using the Meta Quest Developer Hub (MQDH).",
+                            "expected_result": "Developer account created, device in developer mode, and linked",
+                            "validation_type": "manual"
+                        }
+                    ]
+                },
+                {
+                    "title": "Project Configuration",
+                    "content": "Setting up a new Unity project for VR development",
+                    "order": 2,
+                    "steps": [
+                        {
+                            "order": 1,
+                            "title": "Create VR Project",
+                            "content": "Create a new 3D Unity project and configure it for Android/Quest platform using the Meta All-Inclusive SDK.",
+                            "expected_result": "New Unity project created with correct settings",
+                            "validation_type": "manual"
+                        },
+                        {
+                            "order": 2,
+                            "title": "Enable XR Plugin Management",
+                            "content": "Enable XR Plugin Management via Unity's Project Settings and select Oculus as the provider for both PC and Android builds.",
+                            "expected_result": "XR Plugin Management enabled and Oculus selected",
+                            "validation_type": "manual"
+                        },
+                        {
+                            "order": 3,
+                            "title": "Basic Scene Setup",
+                            "content": "Set up a basic VR scene using the Meta All-Inclusive SDK's prefabs, such as the XR Origin or XR Rig, and configure them for VR interaction.",
+                            "expected_result": "Basic VR scene ready for development",
+                            "validation_type": "manual"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "title": "VR Interactions and Input",
+            "description": "Implement basic VR interactions and handle Quest controller input using the Input System and Meta All-Inclusive SDK",
+            "content": "Learn to work with Quest controllers and implement VR interactions",
+            "order": 2,
+            "estimated_duration": 90,
+            "chapters": [
+                {
+                    "title": "Controller Input Basics",
+                    "content": "Understanding and implementing Quest controller input",
+                    "order": 1,
+                    "steps": [
+                        {
+                            "order": 1,
+                            "title": "Controller Setup",
+                            "content": "Use the Meta All-Inclusive SDK prefabs for Quest controller models and input tracking in your scene.",
+                            "expected_result": "Controllers visible and tracking in VR",
+                            "validation_type": "code"
+                        },
+                        {
+                            "order": 2,
+                            "title": "Input Actions",
+                            "content": "Configure Unity's Input System to handle controller buttons, thumbsticks, and triggers for interaction.",
+                            "expected_result": "Controller input mapped to actions",
+                            "validation_type": "code"
+                        },
+                        {
+                            "order": 3,
+                            "title": "Hand Tracking",
+                            "content": "Enable hand tracking in the XR Plugin Management settings and implement hand interaction prefabs from the Meta SDK.",
+                            "expected_result": "Hand tracking working in the scene",
+                            "validation_type": "code"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "title": "VR Movement and Locomotion",
+            "description": "Implement different VR movement systems using Meta's recommended practices",
+            "content": "Learn various VR locomotion techniques",
+            "order": 3,
+            "estimated_duration": 120,
+            "chapters": [
+                {
+                    "title": "Basic Locomotion",
+                    "content": "Implementing fundamental VR movement systems",
+                    "order": 1,
+                    "steps": [
+                        {
+                            "order": 1,
+                            "title": "Teleportation",
+                            "content": "Use the Meta SDK's teleportation system and configure teleportation areas in your scene.",
+                            "expected_result": "Working teleportation system",
+                            "validation_type": "code"
+                        },
+                        {
+                            "order": 2,
+                            "title": "Continuous Movement",
+                            "content": "Implement smooth locomotion using thumbstick input configured via the Input System.",
+                            "expected_result": "Smooth locomotion system working",
+                            "validation_type": "code"
+                        },
+                        {
+                            "order": 3,
+                            "title": "Comfort Settings",
+                            "content": "Add comfort features such as vignetting, snap turning, and adjustable movement speeds using Meta's recommended prefabs.",
+                            "expected_result": "Comfort features implemented",
+                            "validation_type": "code"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+
+    for tutorial_data in unity_vr_tutorials:
+        chapters = tutorial_data.pop('chapters')
+        tutorial = Tutorial(
+            learning_path_id=unity_vr_path.id,
+            **tutorial_data
+        )
+        db.add(tutorial)
+        db.flush()
+        
+        for chapter_data in chapters:
+            steps_data = chapter_data.pop('steps', [])
+            chapter = Chapter(
+                tutorial_id=tutorial.id,
+                **chapter_data
+            )
+            db.add(chapter)
+            db.flush()
+            
+            for step_data in steps_data:
+                step = Step(
+                    chapter_id=chapter.id,
+                    **step_data
+                )
+                db.add(step)
+
     try:
         db.commit()
         print("Sample learning paths, tutorials, and chapters loaded successfully!")
