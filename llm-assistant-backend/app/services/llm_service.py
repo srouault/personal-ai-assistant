@@ -177,7 +177,7 @@ Answer: I don't have any relevant information in my context to answer this quest
         """Generate a concise summary using the LLM."""
         try:
             # Create the prompt
-            prompt = f"""System: You are a precise summarization assistant. Your task is to create clear brief short 10 to 15 word summary.
+            prompt = f"""You are a precise summarization assistant. Your task is to create clear brief short 10 to 15 word summary.
             
 Instruction: {instruction}
 
@@ -186,18 +186,14 @@ Text to summarize:
 
 Summary:"""
 
-            # Generate summary
-            response = self.llm(
-                prompt,
-                max_tokens=max_tokens,
+            # Generate summary using the provider
+            summary = await self.llm_provider.generate_completion(
+                prompt=prompt,
                 temperature=temperature,
-                top_p=0.1,  # More focused sampling
-                top_k=10,
-                repeat_penalty=1.2,
-                stop=["Text to summarize:", "System:", "Instruction:", "Assistant:"],
+                max_tokens=max_tokens
             )
 
-            return response['choices'][0]['text'].strip()
+            return summary.strip()
 
         except Exception as e:
             logging.error(f"Error generating summary: {str(e)}")
