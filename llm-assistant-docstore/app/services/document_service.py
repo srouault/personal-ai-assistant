@@ -80,17 +80,6 @@ class DocumentService:
                 logging.info(f"Document {filename} already exists in {collection}, skipping")
                 return existing_docs['ids'][0]
 
-            # First store in SQLite to get document_id
-            doc = DBDocument(
-                filename=filename,
-                content=content,
-                file_type=Path(filename).suffix.lower()
-            )
-            self.db.add(doc)
-            self.db.commit()
-            document_id = doc.id
-            logging.info(f"Stored document in SQLite with ID: {document_id}")
-
             # Extract text based on file type
             text = self._get_file_content(filename, content)
             
@@ -103,7 +92,6 @@ class DocumentService:
             paragraphs = text.split('\n\n')
             
             for paragraph in paragraphs:
-                # Further split long paragraphs into sentences
                 sentences = paragraph.replace('\n', ' ').split('.')
                 
                 for sentence in sentences:
@@ -119,7 +107,6 @@ class DocumentService:
                         current_chunk.append(sentence)
                         current_length += sentence_length
                 
-                # Add paragraph break if we're continuing the same chunk
                 if current_chunk:
                     current_chunk.append('\n\n')
                     current_length += 2
@@ -131,15 +118,36 @@ class DocumentService:
             logging.info(f"Processing document {filename} with {len(chunks)} chunks for {collection}")
             
             documents = []
-            for i, chunk in enumerate(chunks):
+            # Create rolling window of 10 chunks
+            window_size = 10
+            
+            for i in range(len(chunks)):
+                # Create a window of up to 10 chunks
+                window_start = max(0, i - window_size + 1)
+                window_chunks = chunks[window_start:i + 1]
+                combined_text = ' '.join(window_chunks)
+                
+                # Store this window combination in SQLite
+                doc = DBDocument(
+                    filename=f"{filename}_window_{window_start}_{i}",
+                    content=combined_text.encode('utf-8'),
+                    file_type=Path(filename).suffix.lower()
+                )
+                self.db.add(doc)
+                self.db.commit()
+                document_id = doc.id
+                
+                # Create embedding document
                 documents.append(
                     Document(
-                        page_content=chunk,
+                        page_content=combined_text,
                         metadata={
                             "source": filename,
-                            "document_id": document_id,  # Add SQLite document ID
+                            "document_id": document_id,
                             "collection": collection,
                             "chunk_id": i,
+                            "window_start": window_start,
+                            "window_end": i,
                             "total_chunks": len(chunks),
                             "file_type": Path(filename).suffix.lower()
                         }
@@ -149,7 +157,7 @@ class DocumentService:
             db.add_documents(documents)
             db.persist()
             
-            logging.info(f"Successfully added document {filename} to {collection} with ID {document_id}")
+            logging.info(f"Successfully added document {filename} to {collection}")
             return document_id
             
         except Exception as e:
